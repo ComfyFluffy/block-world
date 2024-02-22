@@ -1,0 +1,25 @@
+[package]
+name = "block-world"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bincode = "2.0.0-rc.3"
+vulkano = { git = "https://github.com/vulkano-rs/vulkano.git" }
+vulkano-util = { git = "https://github.com/vulkano-rs/vulkano.git" }
+vulkano-shaders = { git = "https://github.com/vulkano-rs/vulkano.git" }
+cgmath = "0.18.0"
+winit = "0.29.7"
+log = "0.4"
+zip = "0.6.6"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
+indexmap = "2.2.3"
+rayon = "1.8.1"
+[profile.release]
+debug = true
+
+[profile.dev]
+opt-level = 1
