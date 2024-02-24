@@ -2,6 +2,36 @@ use indexmap::{indexmap, IndexMap};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum Direction {
+    Up = 0,
+    Down,
+    North,
+    South,
+    East,
+    West,
+}
+
+impl Direction {
+    pub const ALL: [Direction; 6] = {
+        use Direction::*;
+        [Up, Down, North, South, East, West]
+    };
+
+    pub fn to_offset(&self) -> (i32, i32, i32) {
+        use Direction::*;
+        match self {
+            Up => (0, 1, 0),
+            Down => (0, -1, 0),
+            North => (0, 0, -1),
+            South => (0, 0, 1),
+            East => (1, 0, 0),
+            West => (-1, 0, 0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BlockType {
     pub name: String,
@@ -42,7 +72,7 @@ impl BlockRegistry {
     }
 
     pub fn is_block_transparent(&self, block_type_id: BlockTypeId) -> bool {
-        block_type_id == 0 || self.block_types[block_type_id as usize].transparent
+        self.block_types[block_type_id as usize].transparent
     }
 }
 

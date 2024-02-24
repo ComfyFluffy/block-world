@@ -1,40 +1,26 @@
-use crate::types::{BlockTypeId, Chunk, ChunkPosition, World};
+use crate::types::{BlockTypeId, Chunk, ChunkPosition, Direction, World};
 use rayon::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
-    Up,
-    Down,
-    North,
-    South,
-    East,
-    West,
-}
-
-impl Direction {
-    const ALL: [Direction; 6] = {
-        use Direction::*;
-        [Up, Down, North, South, East, West]
-    };
-
-    fn to_offset(&self) -> (i32, i32, i32) {
-        use Direction::*;
-        match self {
-            Up => (0, 1, 0),
-            Down => (0, -1, 0),
-            North => (0, 0, -1),
-            South => (0, 0, 1),
-            East => (1, 0, 0),
-            West => (-1, 0, 0),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VisibleFace {
     position: (u32, u32, u32),
     direction: Direction,
     block_type_id: BlockTypeId,
+}
+
+impl VisibleFace {
+    pub fn all_faces(
+        position: (u32, u32, u32),
+        block_type_id: BlockTypeId,
+    ) -> impl Iterator<Item = Self> {
+        Direction::ALL
+            .into_iter()
+            .map(move |direction| VisibleFace {
+                position,
+                direction,
+                block_type_id,
+            })
+    }
 }
 
 fn cull_faces(world: &World) -> Vec<VisibleFace> {
@@ -44,24 +30,25 @@ fn cull_faces(world: &World) -> Vec<VisibleFace> {
         .flat_map(|(chunk_position, chunk)| {
             chunk
                 .blocks
-                .into_par_iter()
+                .par_iter()
                 .enumerate()
                 .flat_map(move |(y, xz_plane)| {
                     xz_plane
-                        .into_par_iter()
+                        .par_iter()
                         .enumerate()
                         .flat_map(move |(x, z_column)| {
-                            z_column.into_par_iter().enumerate().flat_map(
-                                move |(z, block_type_id)| {
+                            z_column
+                                .par_iter()
+                                .enumerate()
+                                .flat_map(move |(z, block_type_id)| {
                                     check_visible_faces_for_block(
-                                        block_type_id,
+                                        *block_type_id,
                                         world,
                                         chunk,
                                         *chunk_position,
-                                        (x as i32, y as i32, z as i32),
+                                        (x as u32, y as u32, z as u32),
                                     )
-                                },
-                            )
+                                })
                         })
                 })
         })
@@ -73,16 +60,19 @@ fn check_visible_faces_for_block(
     world: &World,
     chunk: &Chunk,
     chunk_position: ChunkPosition,
-    block_position: (i32, i32, i32),
+    block_position: (u32, u32, u32),
 ) -> Vec<VisibleFace> {
-    let (x, y, z) = block_position;
+    if block_type_id == 0 {
+        return Vec::new();
+    }
 
-    let mut visible_faces = Vec::new();
+    let (x, y, z) = block_position;
 
     let block_registry = &world.block_registry;
     if block_registry.is_block_transparent(block_type_id) {
-        return visible_faces; // Skip transparent blocks and air (id 0)
+        return VisibleFace::all_faces(block_position, block_type_id).collect();
     }
+    let mut visible_faces = Vec::new();
 
     // If the block is at the edge of the chunk, check for
     // adjacent blocks in the neighboring chunk using the
@@ -139,6 +129,8 @@ fn check_visible_faces_for_block(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::types::BlockRegistry;
 
     use super::*;
@@ -210,8 +202,12 @@ mod tests {
             &chunk,
             chunk_position,
             block_position_left,
-        );
+        )
+        .into_iter()
+        .map(|f| f.direction)
+        .collect::<HashSet<_>>();
         assert_eq!(visible_faces_left.len(), 5);
+        assert!(!visible_faces_left.contains(&Direction::West));
 
         // Right edge
         let block_position_right = (15, 64, 8);
@@ -251,8 +247,8 @@ mod tests {
     fn test_chunk_edge_loaded() {
         let block_registry = BlockRegistry::new();
         let mut world = World::new(block_registry);
-        let chunk = Chunk::default();
         let chunk_position = ChunkPosition { x: 0, z: 0 };
+        world.chunks.insert(chunk_position, Chunk::default());
         let block_type_id = 1; // Replace with the actual block type ID
 
         let neighbor_chunk = Chunk::default();
@@ -263,7 +259,7 @@ mod tests {
         let visible_faces = check_visible_faces_for_block(
             block_type_id,
             &world,
-            &chunk,
+            &world.chunks[&chunk_position],
             chunk_position,
             block_position_x_plus,
         );
@@ -278,10 +274,39 @@ mod tests {
         let visible_faces = check_visible_faces_for_block(
             block_type_id,
             &world,
-            &chunk,
+            &world.chunks[&chunk_position],
             chunk_position,
             block_position_x_plus,
         );
         assert_eq!(visible_faces.len(), 5);
+    }
+
+    #[test]
+    fn test_chunk_dig_one_block() {
+        let chunk_position = ChunkPosition { x: 0, z: 0 };
+        let block_registry = BlockRegistry::new();
+        let mut world = World::new(block_registry);
+        world.chunks.insert(chunk_position, Chunk::default());
+        let chunk = world.chunks.get_mut(&chunk_position).unwrap();
+
+        assert!(!world.block_registry.is_block_transparent(1));
+
+        let stone_id = 1;
+
+        for y in 0..64 {
+            for x in 0..16 {
+                for z in 0..16 {
+                    chunk.blocks[y as usize][x][z] = stone_id;
+                }
+            }
+        }
+
+        let visible_faces = cull_faces(&world);
+        assert_eq!(visible_faces.len(), 16 * 16 * 2);
+
+        world.chunks.get_mut(&chunk_position).unwrap().blocks[63][1][1] = 0;
+
+        let visible_faces = cull_faces(&world);
+        assert_eq!(visible_faces.len(), 16 * 16 * 2 + 4);
     }
 }
