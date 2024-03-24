@@ -107,39 +107,4 @@ impl World {
             block_registry,
         }
     }
-
-    pub fn generate_chunk(&mut self, position: ChunkPosition) {
-        let mut chunk = Chunk {
-            blocks: [[[0; 16]; 16]; 256],
-        };
-        let stone_id = self
-            .block_registry
-            .block_types
-            .get_index_of("stone")
-            .unwrap();
-
-        let grass_id = self
-            .block_registry
-            .block_types
-            .get_index_of("grass")
-            .unwrap();
-
-        let air_id = 0;
-
-        for x in 0..16 {
-            for z in 0..16 {
-                for y in 0..256 {
-                    let block_type = if y < 128 {
-                        stone_id
-                    } else if y == 128 {
-                        grass_id
-                    } else {
-                        air_id
-                    } as BlockTypeId;
-                    chunk.blocks[y as usize][x][z] = block_type;
-                }
-            }
-        }
-        self.chunks.insert(position, chunk);
-    }
 }

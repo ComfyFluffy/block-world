@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::types::{BlockTypeId, Chunk, ChunkPosition, Direction, World};
 use rayon::prelude::*;
 
@@ -23,34 +25,41 @@ impl VisibleFace {
     }
 }
 
-fn cull_faces(world: &World) -> Vec<VisibleFace> {
+fn cull_faces_for_chunk(
+    world: &World,
+    chunk: &Chunk,
+    chunk_position: ChunkPosition,
+) -> Vec<VisibleFace> {
+    chunk
+        .blocks
+        .par_iter()
+        .enumerate()
+        .flat_map_iter(move |(y, xz_plane)| {
+            xz_plane.iter().enumerate().flat_map(move |(x, z_column)| {
+                z_column
+                    .iter()
+                    .enumerate()
+                    .flat_map(move |(z, block_type_id)| {
+                        check_visible_faces_for_block(
+                            *block_type_id,
+                            world,
+                            chunk,
+                            chunk_position,
+                            (x as u32, y as u32, z as u32),
+                        )
+                    })
+            })
+        })
+        .collect()
+}
+
+fn cull_faces(world: &World) -> HashMap<ChunkPosition, Vec<VisibleFace>> {
     world
         .chunks
         .par_iter()
-        .flat_map(|(chunk_position, chunk)| {
-            chunk
-                .blocks
-                .par_iter()
-                .enumerate()
-                .flat_map(move |(y, xz_plane)| {
-                    xz_plane
-                        .par_iter()
-                        .enumerate()
-                        .flat_map(move |(x, z_column)| {
-                            z_column
-                                .par_iter()
-                                .enumerate()
-                                .flat_map(move |(z, block_type_id)| {
-                                    check_visible_faces_for_block(
-                                        *block_type_id,
-                                        world,
-                                        chunk,
-                                        *chunk_position,
-                                        (x as u32, y as u32, z as u32),
-                                    )
-                                })
-                        })
-                })
+        .map(|(chunk_position, chunk)| {
+            let visible_faces = cull_faces_for_chunk(world, chunk, *chunk_position);
+            (*chunk_position, visible_faces)
         })
         .collect()
 }
@@ -125,6 +134,18 @@ fn check_visible_faces_for_block(
         }
     }
     visible_faces
+}
+
+fn update_visible_faces(
+    world: &World,
+    visible_faces: &mut HashMap<ChunkPosition, Vec<VisibleFace>>,
+    chunk_positions: &[ChunkPosition],
+) {
+    for chunk_position in chunk_positions {
+        let chunk = world.chunks.get(chunk_position).unwrap();
+        let new_visible_faces = cull_faces_for_chunk(world, chunk, *chunk_position);
+        visible_faces.insert(*chunk_position, new_visible_faces);
+    }
 }
 
 #[cfg(test)]
@@ -300,13 +321,24 @@ mod tests {
                 }
             }
         }
-
         let visible_faces = cull_faces(&world);
-        assert_eq!(visible_faces.len(), 16 * 16 * 2);
+        assert_eq!(
+            visible_faces
+                .into_iter()
+                .map(|(_, v)| v.len())
+                .sum::<usize>(),
+            16 * 16 * 2
+        );
 
         world.chunks.get_mut(&chunk_position).unwrap().blocks[63][1][1] = 0;
 
         let visible_faces = cull_faces(&world);
-        assert_eq!(visible_faces.len(), 16 * 16 * 2 + 4);
+        assert_eq!(
+            visible_faces
+                .into_iter()
+                .map(|(_, v)| v.len())
+                .sum::<usize>(),
+            16 * 16 * 2 + 4
+        );
     }
 }
