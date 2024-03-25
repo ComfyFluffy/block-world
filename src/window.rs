@@ -10,11 +10,11 @@ use vulkano_util::{
     window::VulkanoWindows,
 };
 
-pub struct App {
-    context: VulkanoContext,
-    windows: VulkanoWindows,
-    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
+pub(crate) struct App {
+    pub context: VulkanoContext,
+    pub windows: VulkanoWindows,
+    pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    pub descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
 }
 
 impl App {
