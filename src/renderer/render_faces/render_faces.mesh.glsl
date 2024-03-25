@@ -10,6 +10,14 @@ layout(max_vertices = 4, max_primitives = 2, triangles) out;
 //////////////////////////////////////////////////
 // UNIFORMS
 
+struct CubeFace {
+  uvec3 position;
+  uint direction;
+};
+
+layout(set = 0, binding = 0) uniform CubeFaces { CubeFace cube_faces[]; }
+cubeFaces;
+
 layout(push_constant) uniform PushConstants {
   mat4 view;
   mat4 proj;
@@ -130,7 +138,8 @@ void main() {
     v_out[i].normal = vertices[i].normal;
     v_out[i].textureIndex = vertices[i].textureIndex;
 
-    gl_MeshVerticesEXT[i].gl_Position = vec4(vertices[i].position, 1.0);
+    gl_MeshVerticesEXT[i].gl_Position =
+        pc.proj * pc.view * vec4(v_out[i].position, 1.0);
   }
 
   gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
