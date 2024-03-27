@@ -4,6 +4,7 @@ use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{DeviceExtensions, Features},
+    memory::allocator::StandardMemoryAllocator,
 };
 use vulkano_util::{
     context::{VulkanoConfig, VulkanoContext},
@@ -61,5 +62,9 @@ impl App {
             command_buffer_allocator,
             descriptor_set_allocator,
         }
+    }
+
+    pub fn memory_allocator(&self) -> Arc<StandardMemoryAllocator> {
+        self.context.memory_allocator().clone()
     }
 }

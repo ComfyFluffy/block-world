@@ -1,11 +1,20 @@
 use std::sync::Arc;
 
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{
+        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsage, CopyBufferToImageInfo,
+        RecordingCommandBuffer,
+    },
     descriptor_set::{DescriptorSet, WriteDescriptorSet},
     device::Queue,
-    image::Image,
-    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
+    format::Format,
+    image::{
+        sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo},
+        view::ImageView,
+        Image, ImageCreateInfo, ImageType, ImageUsage,
+    },
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     pipeline::{
         graphics::{
             color_blend::{ColorBlendAttachmentState, ColorBlendState},
@@ -17,8 +26,9 @@ use vulkano::{
             GraphicsPipelineCreateInfo,
         },
         layout::PipelineDescriptorSetLayoutCreateInfo,
-        DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+        DynamicState, GraphicsPipeline, Pipeline, PipelineLayout, PipelineShaderStageCreateInfo,
     },
+    sync::GpuFuture,
 };
 
 use crate::{types::Direction, window::App};
@@ -39,20 +49,67 @@ mod frag {
     );
 }
 
-fn image_to_view(path: &str) -> Arc<Image> {
-    let image = image::open(path).unwrap().to_rgba8();
-    let image_data = image.into_raw();
-    let image_dimensions = image.dimensions();
-
-    let (image, future) = Image::new().unwrap();
-
-    future.flush().unwrap();
-
-    image
+pub struct Camera {
+    pub view: cgmath::Matrix4<f32>,
+    pub proj: cgmath::Matrix4<f32>,
+    pub position: cgmath::Point3<f32>,
 }
 
-struct RenderFacesPipeline {
+fn upload_png(
+    bytes: &[u8],
+    memory_allocator: Arc<StandardMemoryAllocator>,
+    command_buffer: &mut RecordingCommandBuffer,
+) -> Arc<ImageView> {
+    let decoder = png::Decoder::new(bytes);
+    let mut reader = decoder.read_info().unwrap();
+    let info = reader.info();
+    let extent = [info.width, info.height, 1];
+
+    let upload_buffer = Buffer::new_slice(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::TRANSFER_SRC,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        (info.width * info.height * 4) as u64,
+    )
+    .unwrap();
+
+    reader
+        .next_frame(&mut upload_buffer.write().unwrap())
+        .unwrap();
+
+    let image = Image::new(
+        memory_allocator,
+        ImageCreateInfo {
+            image_type: ImageType::Dim2d,
+            format: Format::R8G8B8A8_SRGB,
+            extent,
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
+            ..Default::default()
+        },
+        AllocationCreateInfo::default(),
+    )
+    .unwrap();
+
+    command_buffer
+        .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
+            upload_buffer,
+            image.clone(),
+        ))
+        .unwrap();
+
+    ImageView::new_default(image).unwrap()
+}
+
+pub struct RenderFacesPipeline {
     pipeline: Arc<GraphicsPipeline>,
+    descriptor_sets: [Arc<DescriptorSet>; 2],
 }
 
 impl RenderFacesPipeline {
@@ -61,7 +118,9 @@ impl RenderFacesPipeline {
         queue: Arc<Queue>,
         rendering_info: PipelineRenderingCreateInfo,
     ) -> RenderFacesPipeline {
-        let (pipeline, layout) = {
+        assert!(mesh::PushConstants::LAYOUT == frag::PushConstants::LAYOUT);
+
+        let pipeline = {
             let device = queue.device().clone();
             let mesh = mesh::load(device.clone())
                 .unwrap()
@@ -85,37 +144,34 @@ impl RenderFacesPipeline {
             )
             .unwrap();
 
-            (
-                GraphicsPipeline::new(
-                    device.clone(),
-                    None,
-                    GraphicsPipelineCreateInfo {
-                        stages: stages.into_iter().collect(),
-                        viewport_state: Some(ViewportState::default()),
-                        rasterization_state: Some(RasterizationState {
-                            cull_mode: CullMode::Back,
-                            ..Default::default()
+            GraphicsPipeline::new(
+                device.clone(),
+                None,
+                GraphicsPipelineCreateInfo {
+                    stages: stages.into_iter().collect(),
+                    viewport_state: Some(ViewportState::default()),
+                    rasterization_state: Some(RasterizationState {
+                        cull_mode: CullMode::Back,
+                        ..Default::default()
+                    }),
+                    multisample_state: Some(MultisampleState::default()),
+                    color_blend_state: Some(ColorBlendState::with_attachment_states(
+                        rendering_info.color_attachment_formats.len() as u32,
+                        ColorBlendAttachmentState::default(),
+                    )),
+                    depth_stencil_state: Some(DepthStencilState {
+                        depth: Some(DepthState {
+                            compare_op: CompareOp::Less,
+                            write_enable: true,
                         }),
-                        multisample_state: Some(MultisampleState::default()),
-                        color_blend_state: Some(ColorBlendState::with_attachment_states(
-                            rendering_info.color_attachment_formats.len() as u32,
-                            ColorBlendAttachmentState::default(),
-                        )),
-                        depth_stencil_state: Some(DepthStencilState {
-                            depth: Some(DepthState {
-                                compare_op: CompareOp::Less,
-                                write_enable: true,
-                            }),
-                            ..Default::default()
-                        }),
-                        dynamic_state: [DynamicState::Viewport].into_iter().collect(),
-                        subpass: Some(rendering_info.into()),
-                        ..GraphicsPipelineCreateInfo::layout(layout.clone())
-                    },
-                )
-                .unwrap(),
-                layout,
+                        ..Default::default()
+                    }),
+                    dynamic_state: [DynamicState::Viewport].into_iter().collect(),
+                    subpass: Some(rendering_info.into()),
+                    ..GraphicsPipelineCreateInfo::layout(layout)
+                },
             )
+            .unwrap()
         };
 
         let cube_faces: Vec<_> = Direction::ALL
@@ -148,22 +204,95 @@ impl RenderFacesPipeline {
         }
 
         let descriptor_sets = {
-            let set_layouts = layout.set_layouts();
+            let mut command_buffer = RecordingCommandBuffer::new(
+                app.command_buffer_allocator.clone(),
+                queue.queue_family_index(),
+                CommandBufferLevel::Primary,
+                CommandBufferBeginInfo {
+                    usage: CommandBufferUsage::OneTimeSubmit,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+            let set_layouts = pipeline.layout().set_layouts();
 
             let mesh_descriptor_set = DescriptorSet::new(
                 app.descriptor_set_allocator.clone(),
                 set_layouts[0].clone(),
                 [WriteDescriptorSet::buffer(0, cube_faces_buffer.clone())],
                 None,
+            )
+            .unwrap();
+
+            let stone_png_bytes = include_bytes!("stone.png");
+            let stone_png_image_view = upload_png(
+                stone_png_bytes,
+                app.context.memory_allocator().clone(),
+                &mut command_buffer,
             );
+
+            let sampler = Sampler::new(
+                queue.device().clone(),
+                SamplerCreateInfo {
+                    mag_filter: Filter::Nearest,
+                    min_filter: Filter::Nearest,
+                    address_mode: [SamplerAddressMode::Repeat; 3],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
             let frag_descriptor_set = DescriptorSet::new(
                 app.descriptor_set_allocator.clone(),
                 set_layouts[1].clone(),
-                [WriteDescriptorSet::image_view_sampler_array(0, 0, elements)],
+                [WriteDescriptorSet::image_view_sampler_array(
+                    0,
+                    0,
+                    [(stone_png_image_view, sampler)],
+                )],
                 None,
-            );
+            )
+            .unwrap();
+
+            command_buffer
+                .end()
+                .unwrap()
+                .execute(queue.clone())
+                .unwrap()
+                .then_signal_fence_and_flush()
+                .unwrap()
+                .wait(None)
+                .unwrap();
+            [mesh_descriptor_set, frag_descriptor_set]
         };
-        Self { pipeline }
+        Self {
+            pipeline,
+            descriptor_sets,
+        }
+    }
+
+    pub fn render_cube_faces(&self, builder: &mut RecordingCommandBuffer, camera: &Camera) {
+        builder
+            .bind_pipeline_graphics(self.pipeline.clone())
+            .unwrap()
+            .bind_descriptor_sets(
+                self.pipeline.bind_point(),
+                self.pipeline.layout().clone(),
+                0,
+                self.descriptor_sets.to_vec(),
+            )
+            .unwrap()
+            .push_constants(
+                self.pipeline.layout().clone(),
+                0,
+                mesh::PushConstants {
+                    view: camera.view.into(),
+                    proj: camera.proj.into(),
+                    camera_pos: camera.position.into(),
+                },
+            )
+            .unwrap();
+        unsafe { builder.draw_mesh_tasks([6, 1, 1]).unwrap() };
     }
 }

@@ -1,10 +1,10 @@
-#version 450
+#version 460
 #extension GL_EXT_mesh_shader : require
 
 //////////////////////////////////////////////////
 // MESH CONFIG
 
-layout(local_size_x = 1) in;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout(max_vertices = 4, max_primitives = 2, triangles) out;
 
 //////////////////////////////////////////////////
@@ -15,8 +15,7 @@ struct CubeFace {
   uint direction;
 };
 
-layout(set = 0, binding = 0) uniform CubeFaces { CubeFace cube_faces[]; }
-cubeFaces;
+layout(set = 0, binding = 0) buffer CubeFaces { CubeFace cube_faces[]; };
 
 layout(push_constant) uniform PushConstants {
   mat4 view;
@@ -123,8 +122,9 @@ void getFaceVertices(uvec3 cubePosition, uint direction,
 
 void main() {
   // Placeholder for data fetching
-  uvec3 cubePosition;
-  uint direction;
+  uint index = gl_GlobalInvocationID.x;
+  uvec3 cubePosition = cube_faces[index].position;
+  uint direction = cube_faces[index].direction;
   uint textureIndex;
 
   // Define vertices for one cube face
