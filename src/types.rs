@@ -5,7 +5,9 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use crate::texture::TextureRegistry;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[repr(u32)]
 pub enum Direction {
     Up = 0,
@@ -35,39 +37,69 @@ impl Direction {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct BlockTextures(pub HashMap<Direction, TextureId>);
+
+impl BlockTextures {
+    pub fn uniform(texture_id: TextureId) -> Self {
+        let mut textures = HashMap::new();
+        for &direction in Direction::ALL.iter() {
+            textures.insert(direction, texture_id);
+        }
+        Self(textures)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BlockType {
     pub name: String,
-    pub texture: Option<String>,
+    pub textures: BlockTextures,
     pub transparent: bool,
 }
 
-pub type BlockTypeId = u32;
+pub type BlockTypeId = usize;
 pub type TextureId = usize;
 
 #[derive(Debug, Clone)]
 pub struct BlockRegistry {
     pub block_types: IndexMap<String, BlockType>,
-    pub block_textures: HashMap<(BlockTypeId, Direction), TextureId>,
+    pub texture_registry: TextureRegistry,
 }
 
-impl BlockRegistry {
-    pub fn new() -> Self {
+impl Default for BlockRegistry {
+    fn default() -> Self {
         let block_types = indexmap! {
             "air".to_string() => BlockType {
                 name: "air".to_string(),
-                texture: None,
                 transparent: true,
+                textures: BlockTextures::default(),
+            },
+        };
+
+        Self {
+            block_types,
+            texture_registry: TextureRegistry::default(),
+        }
+    }
+}
+
+impl BlockRegistry {
+    pub fn new(texture_registry: TextureRegistry) -> Self {
+        let block_types = indexmap! {
+            "air".to_string() => BlockType {
+                name: "air".to_string(),
+                transparent: true,
+                textures: BlockTextures::default(),
             },
             "stone".to_string() => BlockType {
                 name: "stone".to_string(),
-                texture: Some("stone.png".to_string()),
                 transparent: false,
+                textures: BlockTextures::uniform(texture_registry.get_index_of("stone").unwrap()),
             },
             "grass".to_string() => BlockType {
                 name: "grass".to_string(),
-                texture: Some("grass.png".to_string()),
                 transparent: false,
+                textures: BlockTextures::uniform(texture_registry.get_index_of("grass").unwrap()),
             },
         };
 
@@ -75,19 +107,12 @@ impl BlockRegistry {
 
         Self {
             block_types,
-            block_textures: HashMap::new(),
+            texture_registry,
         }
     }
 
     pub fn is_block_transparent(&self, block_type_id: BlockTypeId) -> bool {
-        self.block_types[block_type_id as usize].transparent
-    }
-
-    pub fn set_uniform_texture(&mut self, block_type_id: BlockTypeId, texture_id: TextureId) {
-        for &direction in Direction::ALL.iter() {
-            self.block_textures
-                .insert((block_type_id, direction), texture_id);
-        }
+        self.block_types[block_type_id].transparent
     }
 }
 

@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_middle_block() {
-        let block_registry = BlockRegistry::new();
+        let block_registry = BlockRegistry::default();
         let world = World::new(block_registry);
         let chunk = Chunk::default();
         let chunk_position = ChunkPosition { x: 0, z: 0 };
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_top_and_bottom_blocks() {
-        let block_registry = BlockRegistry::new();
+        let block_registry = BlockRegistry::default();
         let world = World::new(block_registry);
         let chunk = Chunk::default();
         let chunk_position = ChunkPosition { x: 0, z: 0 };
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_chunk_edge_not_loaded() {
-        let block_registry = BlockRegistry::new();
+        let block_registry = BlockRegistry::default();
         let world = World::new(block_registry);
         let chunk = Chunk::default();
         let chunk_position = ChunkPosition { x: 0, z: 0 };
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_chunk_edge_loaded() {
-        let block_registry = BlockRegistry::new();
+        let block_registry = BlockRegistry::default();
         let mut world = World::new(block_registry);
         let chunk_position = ChunkPosition { x: 0, z: 0 };
         world.chunks.insert(chunk_position, Chunk::default());
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn test_chunk_dig_one_block() {
         let chunk_position = ChunkPosition { x: 0, z: 0 };
-        let block_registry = BlockRegistry::new();
+        let block_registry = BlockRegistry::default();
         let mut world = World::new(block_registry);
         world.chunks.insert(chunk_position, Chunk::default());
         let chunk = world.chunks.get_mut(&chunk_position).unwrap();
