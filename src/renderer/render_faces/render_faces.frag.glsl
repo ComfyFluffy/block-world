@@ -7,26 +7,15 @@ layout(location = 0) in VertexOut {
   flat uint textureIndex;
 }
 v_out;
+
 layout(location = 0) out vec4 fragColor;
 
-layout(push_constant) uniform PushConstants {
-  mat4 view;
-  mat4 proj;
-  vec3 camera_pos;
-}
-pc;
-layout(binding = 0) uniform sampler2DArray textures;
-
 void main() {
+  // Use the normal directly, but normalize it to be sure it's in the unit range
   vec3 normal = normalize(v_out.normal);
-  vec3 light_dir = normalize(vec3(1.0, 1.0, 1.0));
-  float light_intensity = max(dot(normal, light_dir), 0.0);
 
-  vec3 view_dir = normalize(pc.camera_pos - v_out.position);
-  vec3 reflect_dir = reflect(-light_dir, normal);
-  float spec_intensity = pow(max(dot(view_dir, reflect_dir), 0.0), 32);
+  // Map each component from [-1, 1] to [0, 1]
+  vec3 color = normal * 0.5 + 0.5;
 
-  vec4 texColor = texture(textures, vec3(v_out.texCoord, v_out.textureIndex));
-  fragColor = vec4(texColor.rgb * light_intensity + vec3(0.1) * spec_intensity,
-                   texColor.a);
+  fragColor = vec4(color, 1.0);  // Set alpha to 1.0 for full opacity
 }

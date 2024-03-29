@@ -3,7 +3,7 @@ use std::sync::Arc;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
     descriptor_set::allocator::StandardDescriptorSetAllocator,
-    device::{DeviceExtensions, Features},
+    device::{DeviceExtensions, DeviceFeatures},
     memory::allocator::StandardMemoryAllocator,
 };
 use vulkano_util::{
@@ -23,17 +23,18 @@ impl App {
         let mut config = VulkanoConfig {
             device_extensions: DeviceExtensions {
                 khr_swapchain: true,
-                khr_dynamic_rendering: true,
                 ext_mesh_shader: true,
                 // khr_acceleration_structure: true,
                 // khr_ray_tracing_pipeline: true,
                 // khr_deferred_host_operations: true,
                 ..DeviceExtensions::empty()
             },
-            device_features: Features {
+            device_features: DeviceFeatures {
                 dynamic_rendering: true,
                 fill_mode_non_solid: true,
-                ..Features::empty()
+                mesh_shader: true,
+                maintenance4: true,
+                ..DeviceFeatures::empty()
             },
             ..Default::default()
         };

@@ -11,7 +11,7 @@ use vulkano::{
     format::Format,
     image::{
         sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo},
-        view::ImageView,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
         Image, ImageCreateInfo, ImageType, ImageUsage,
     },
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
@@ -45,7 +45,6 @@ mod frag {
     vulkano_shaders::shader!(
         ty: "fragment",
         path: "src/renderer/render_faces/render_faces.frag.glsl",
-        vulkan_version: "1.3"
     );
 }
 
@@ -104,12 +103,16 @@ fn upload_png(
         ))
         .unwrap();
 
-    ImageView::new_default(image).unwrap()
+    let view_create_info = ImageViewCreateInfo {
+        view_type: ImageViewType::Dim2dArray,
+        ..ImageViewCreateInfo::from_image(&image)
+    };
+    ImageView::new(image, view_create_info).unwrap()
 }
 
 pub struct RenderFacesPipeline {
     pipeline: Arc<GraphicsPipeline>,
-    descriptor_sets: [Arc<DescriptorSet>; 2],
+    descriptor_sets: Vec<Arc<DescriptorSet>>,
 }
 
 impl RenderFacesPipeline {
@@ -118,7 +121,7 @@ impl RenderFacesPipeline {
         queue: Arc<Queue>,
         rendering_info: PipelineRenderingCreateInfo,
     ) -> RenderFacesPipeline {
-        assert!(mesh::PushConstants::LAYOUT == frag::PushConstants::LAYOUT);
+        // assert!(mesh::PushConstants::LAYOUT == frag::PushConstants::LAYOUT);
 
         let pipeline = {
             let device = queue.device().clone();
@@ -185,7 +188,7 @@ impl RenderFacesPipeline {
         let cube_faces_buffer: Subbuffer<mesh::CubeFaces> = Buffer::new_unsized(
             app.context.memory_allocator().clone(),
             BufferCreateInfo {
-                usage: BufferUsage::UNIFORM_BUFFER,
+                usage: BufferUsage::STORAGE_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -243,17 +246,17 @@ impl RenderFacesPipeline {
             )
             .unwrap();
 
-            let frag_descriptor_set = DescriptorSet::new(
-                app.descriptor_set_allocator.clone(),
-                set_layouts[1].clone(),
-                [WriteDescriptorSet::image_view_sampler_array(
-                    0,
-                    0,
-                    [(stone_png_image_view, sampler)],
-                )],
-                None,
-            )
-            .unwrap();
+            // let frag_descriptor_set = DescriptorSet::new(
+            //     app.descriptor_set_allocator.clone(),
+            //     set_layouts[1].clone(),
+            //     [WriteDescriptorSet::image_view_sampler_array(
+            //         0,
+            //         0,
+            //         [(stone_png_image_view, sampler)],
+            //     )],
+            //     None,
+            // )
+            // .unwrap();
 
             command_buffer
                 .end()
@@ -264,7 +267,10 @@ impl RenderFacesPipeline {
                 .unwrap()
                 .wait(None)
                 .unwrap();
-            [mesh_descriptor_set, frag_descriptor_set]
+            vec![
+                mesh_descriptor_set,
+                // frag_descriptor_set
+            ]
         };
         Self {
             pipeline,

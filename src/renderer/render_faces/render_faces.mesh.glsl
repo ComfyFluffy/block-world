@@ -1,14 +1,14 @@
-#version 460
+#version 450
 #extension GL_EXT_mesh_shader : require
 
 //////////////////////////////////////////////////
 // MESH CONFIG
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-layout(max_vertices = 4, max_primitives = 2, triangles) out;
+layout(triangles, max_vertices = 4, max_primitives = 2) out;
 
 //////////////////////////////////////////////////
-// UNIFORMS
+// BINDINGS
 
 struct CubeFace {
   uvec3 position;
@@ -139,7 +139,7 @@ void main() {
     v_out[i].textureIndex = vertices[i].textureIndex;
 
     gl_MeshVerticesEXT[i].gl_Position =
-        pc.proj * pc.view * vec4(v_out[i].position, 1.0);
+        pc.proj * pc.view * vec4(vertices[i].position, 1.0);
   }
 
   gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);

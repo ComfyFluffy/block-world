@@ -112,7 +112,11 @@ fn run(app: &mut App) {
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
                 extent: [extent[0], extent[1], 1],
-                format: Format::R16G16B16A16_SFLOAT,
+                format: app
+                    .windows
+                    .get_renderer(window_id)
+                    .unwrap()
+                    .swapchain_format(),
                 usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
                 samples,
                 ..Default::default()
@@ -125,7 +129,7 @@ fn run(app: &mut App) {
 
     let command_buffer_allocator = app.command_buffer_allocator.clone();
     let redraw = |renderer: &mut VulkanoWindowRenderer| {
-        let before = renderer.acquire().unwrap();
+        let before = renderer.acquire(None, |_| {}).unwrap();
 
         let after = draw(
             before,

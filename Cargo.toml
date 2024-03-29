@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 bincode = "2.0.0-rc.3"
-vulkano = { git = "https://github.com/vulkano-rs/vulkano.git" }
-vulkano-util = { git = "https://github.com/vulkano-rs/vulkano.git" }
-vulkano-shaders = { git = "https://github.com/vulkano-rs/vulkano.git" }
+vulkano = { path = "../vulkano/vulkano" }
+vulkano-util = { path = "../vulkano/vulkano-util" }
+vulkano-shaders = { path = "../vulkano/vulkano-shaders" }
 cgmath = "0.18.0"
 winit = "0.29.7"
 log = "0.4"
