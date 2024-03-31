@@ -22,7 +22,7 @@ struct Voxel {
   VoxelFace faces[6];
 };
 
-layout(std430, set = 0, binding = 1) buffer VoxelBuffer { Voxel voxels[]; };
+layout(std430, set = 1, binding = 0) buffer VoxelBuffer { Voxel voxels[]; };
 
 layout(push_constant) uniform PushConstants {
   mat4 view;

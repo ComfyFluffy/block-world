@@ -2,10 +2,7 @@
 
 #extension GL_EXT_mesh_shader : require
 
-const uint CHUNK_SIZE = 4;
-
-layout(local_size_x = CHUNK_SIZE, local_size_y = CHUNK_SIZE,
-       local_size_z = CHUNK_SIZE) in;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 //////////////////////////////////////////////////
 // UNIFORMS
@@ -17,12 +14,7 @@ struct Block {
   uint connected_bits;  // 6 bits
 };
 
-struct Chunk {
-  uint len;
-  Block blocks[CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE];
-};
-
-layout(std430, set = 0, binding = 0) buffer ChunkBuffer { Chunk chunks[]; };
+layout(std430, set = 0, binding = 0) buffer BlockBuffer { Block blocks[]; };
 
 struct VoxelFace {
   vec4 uv;
@@ -36,7 +28,7 @@ struct Voxel {
   VoxelFace faces[6];
 };
 
-layout(std430, set = 0, binding = 1) buffer VoxelBuffer { Voxel voxels[]; };
+layout(std430, set = 1, binding = 0) buffer VoxelBuffer { Voxel voxels[]; };
 
 //////////////////////////////////////////////////
 // OUTPUTS
@@ -67,6 +59,9 @@ void main() {
   task.voxel_offset = block.voxel_offset;
   task.connected_bits = block.connected_bits;
 
+  if (block.voxel_len == 0) {
+    return;
+  }
   // Render a single block which may contains multiple voxels
   EmitMeshTasksEXT(voxel_count_lod(block.voxel_len), 1, 1);
 }
