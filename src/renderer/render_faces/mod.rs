@@ -1,7 +1,10 @@
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use vulkano::{
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{
         CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsage, CopyBufferToImageInfo,
         RecordingCommandBuffer,
@@ -15,6 +18,7 @@ use vulkano::{
         Image, ImageCreateInfo, ImageType, ImageUsage,
     },
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
+    padded::Padded,
     pipeline::{
         graphics::{
             color_blend::{ColorBlendAttachmentState, ColorBlendState},
@@ -28,10 +32,9 @@ use vulkano::{
         layout::PipelineDescriptorSetLayoutCreateInfo,
         DynamicState, GraphicsPipeline, Pipeline, PipelineLayout, PipelineShaderStageCreateInfo,
     },
-    sync::GpuFuture,
 };
 
-use crate::{types::Direction, window::App};
+use crate::{types::ChunkPosition, window::App};
 
 mod task {
     vulkano_shaders::shader!(
@@ -54,6 +57,102 @@ mod frag {
         ty: "fragment",
         path: "src/renderer/render_faces/render_faces.frag.glsl",
     );
+}
+
+// Fix-sized array of CHUNK_SIZE^3 blocks, stored sparsely.
+pub use task::Block as GpuBlock;
+pub use task::Chunk as GpuChunk;
+
+struct GpuChunkStorage {
+    chunk_buffer: Subbuffer<task::ChunkBuffer>,
+    index_buffer: Subbuffer<task::IndexBuffer>,
+
+    chunk_blocks_map: HashMap<ChunkPosition, (u32, HashSet<u32>)>, // chunk index, block indices
+    chunk_holes: Vec<u32>,
+}
+
+struct ChunkUpdate {
+    block_index: u32,
+    block: Option<GpuBlock>,
+}
+
+impl GpuChunkStorage {
+    pub fn new(allocator: Arc<StandardMemoryAllocator>, chunks: u64) -> Self {
+        let chunk_buffer = Buffer::new_unsized(
+            allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                ..Default::default()
+            },
+            chunks,
+        )
+        .unwrap();
+
+        let index_buffer = Buffer::new_unsized(
+            allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            chunks * 16 * 16 * 16, // a chunk is 16x16x16 blocks
+        )
+        .unwrap();
+
+        Self {
+            chunk_buffer,
+            index_buffer,
+            chunk_blocks_map: HashMap::new(),
+            chunk_holes: (0..chunks as u32).rev().collect(),
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        chunk_position: ChunkPosition,
+        updates: impl IntoIterator<Item = ChunkUpdate>,
+    ) {
+        let (chunk_index, block_indices) = self
+            .chunk_blocks_map
+            .entry(chunk_position)
+            .or_insert_with(|| {
+                let chunk_index = self.chunk_holes.pop().unwrap();
+                (chunk_index, HashSet::new())
+            });
+
+        let mut chunk = self.chunk_buffer.write().unwrap();
+        for update in updates {
+            if let Some(block) = update.block {
+                chunk.chunks[*chunk_index as usize].blocks[update.block_index as usize] = block;
+                block_indices.insert(update.block_index);
+            } else {
+                block_indices.remove(&update.block_index);
+            }
+        }
+    }
+
+    pub fn upload_indices(&self) -> usize {
+        let mut index_write = self.index_buffer.write().unwrap();
+        let mut i = 0;
+        for (_, (chunk_index, block_indices)) in self.chunk_blocks_map.iter() {
+            for block_index in block_indices.iter() {
+                index_write.indices[i] = [*chunk_index, *block_index];
+                i += 1;
+            }
+        }
+        i
+    }
+
+    // pub fn upload_indices_with_culling(&self, frustum: Frustum) {}
 }
 
 pub struct Camera {
@@ -121,6 +220,8 @@ fn upload_png(
 pub struct RenderFacesPipeline {
     pipeline: Arc<GraphicsPipeline>,
     descriptor_sets: Vec<Arc<DescriptorSet>>,
+
+    gpu_chunk_storage: GpuChunkStorage,
 }
 
 impl RenderFacesPipeline {
@@ -129,10 +230,12 @@ impl RenderFacesPipeline {
         queue: Arc<Queue>,
         rendering_info: PipelineRenderingCreateInfo,
     ) -> RenderFacesPipeline {
-        // assert!(mesh::PushConstants::LAYOUT == frag::PushConstants::LAYOUT);
-
         let pipeline = {
             let device = queue.device().clone();
+            let task = task::load(device.clone())
+                .unwrap()
+                .entry_point("main")
+                .unwrap();
             let mesh = mesh::load(device.clone())
                 .unwrap()
                 .entry_point("main")
@@ -143,6 +246,7 @@ impl RenderFacesPipeline {
                 .unwrap();
 
             let stages = [
+                PipelineShaderStageCreateInfo::new(task),
                 PipelineShaderStageCreateInfo::new(mesh),
                 PipelineShaderStageCreateInfo::new(frag),
             ];
@@ -162,7 +266,7 @@ impl RenderFacesPipeline {
                     stages: stages.into_iter().collect(),
                     viewport_state: Some(ViewportState::default()),
                     rasterization_state: Some(RasterizationState {
-                        cull_mode: CullMode::Back,
+                        cull_mode: CullMode::None,
                         ..Default::default()
                     }),
                     multisample_state: Some(MultisampleState::default()),
@@ -185,106 +289,123 @@ impl RenderFacesPipeline {
             .unwrap()
         };
 
-        // let cube_faces: Vec<_> = Direction::ALL
-        //     .iter()
-        //     .map(|&direction| mesh::CubeFace {
-        //         position: [0, 0, 0],
-        //         direction: direction as u32,
-        //     })
-        //     .collect();
-
-        // let cube_faces_buffer: Subbuffer<mesh::CubeFaces> = Buffer::new_unsized(
-        //     app.context.memory_allocator().clone(),
-        //     BufferCreateInfo {
-        //         usage: BufferUsage::STORAGE_BUFFER,
-        //         ..Default::default()
-        //     },
-        //     AllocationCreateInfo {
-        //         memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-        //             | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-        //         ..Default::default()
-        //     },
-        //     cube_faces.len() as u64,
-        // )
-        // .unwrap();
-        // {
-        //     let mut guard = cube_faces_buffer.write().unwrap();
-        //     for (i, face) in cube_faces.iter().enumerate() {
-        //         guard.cube_faces[i] = *face;
-        //     }
-        // }
+        let mut gpu_chunk_storage = GpuChunkStorage::new(app.context.memory_allocator().clone(), 1);
+        gpu_chunk_storage.update(
+            ChunkPosition { x: 0, z: 0 },
+            [ChunkUpdate {
+                block: Some(GpuBlock {
+                    voxel_offset: 0,
+                    voxel_len: 1,
+                    connected_bits: 0,
+                }),
+                block_index: 0,
+            }],
+        );
+        gpu_chunk_storage.upload_indices();
 
         let descriptor_sets = {
-            let mut command_buffer = RecordingCommandBuffer::new(
-                app.command_buffer_allocator.clone(),
-                queue.queue_family_index(),
-                CommandBufferLevel::Primary,
-                CommandBufferBeginInfo {
-                    usage: CommandBufferUsage::OneTimeSubmit,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+            // let mut command_buffer = RecordingCommandBuffer::new(
+            //     app.command_buffer_allocator.clone(),
+            //     queue.queue_family_index(),
+            //     CommandBufferLevel::Primary,
+            //     CommandBufferBeginInfo {
+            //         usage: CommandBufferUsage::OneTimeSubmit,
+            //         ..Default::default()
+            //     },
+            // )
+            // .unwrap();
 
             let set_layouts = pipeline.layout().set_layouts();
 
-            let mesh_descriptor_set = DescriptorSet::new(
+            let descriptor_set_0 = DescriptorSet::new(
                 app.descriptor_set_allocator.clone(),
                 set_layouts[0].clone(),
                 [
-                    //WriteDescriptorSet::buffer(0, cube_faces_buffer.clone())
-                    ],
+                    WriteDescriptorSet::buffer(0, gpu_chunk_storage.chunk_buffer.clone()),
+                    WriteDescriptorSet::buffer(1, gpu_chunk_storage.index_buffer.clone()),
+                ],
                 None,
             )
             .unwrap();
 
-            let stone_png_bytes = include_bytes!("stone.png");
-            let stone_png_image_view = upload_png(
-                stone_png_bytes,
+            let voxel_buffer = Buffer::new_unsized::<task::VoxelBuffer>(
                 app.context.memory_allocator().clone(),
-                &mut command_buffer,
-            );
-
-            let sampler = Sampler::new(
-                queue.device().clone(),
-                SamplerCreateInfo {
-                    mag_filter: Filter::Nearest,
-                    min_filter: Filter::Nearest,
-                    address_mode: [SamplerAddressMode::Repeat; 3],
+                BufferCreateInfo {
+                    usage: BufferUsage::STORAGE_BUFFER,
                     ..Default::default()
                 },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                1,
             )
             .unwrap();
 
-            // let frag_descriptor_set = DescriptorSet::new(
-            //     app.descriptor_set_allocator.clone(),
-            //     set_layouts[1].clone(),
-            //     [WriteDescriptorSet::image_view_sampler_array(
-            //         0,
-            //         0,
-            //         [(stone_png_image_view, sampler)],
-            //     )],
-            //     None,
-            // )
-            // .unwrap();
+            {
+                let mut voxel_write = voxel_buffer.write().unwrap();
+                voxel_write.voxels[0] = task::Voxel {
+                    faces: [
+                        Padded(task::VoxelFace {
+                            cullface: 6, // none
+                            texture_id: 0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                        }),
+                        Padded(task::VoxelFace {
+                            cullface: 6, // none
+                            texture_id: 0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                        }),
+                        Padded(task::VoxelFace {
+                            cullface: 6, // none
+                            texture_id: 0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                        }),
+                        Padded(task::VoxelFace {
+                            cullface: 6, // none
+                            texture_id: 0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                        }),
+                        Padded(task::VoxelFace {
+                            cullface: 6, // none
+                            texture_id: 0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                        }),
+                        Padded(task::VoxelFace {
+                            cullface: 6, // none
+                            texture_id: 0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                        }),
+                    ],
+                    from: Padded([0.0, 0.0, 0.0]),
+                    to: Padded([1.0, 1.0, 1.0]),
+                };
+            }
 
-            command_buffer
-                .end()
-                .unwrap()
-                .execute(queue.clone())
-                .unwrap()
-                .then_signal_fence_and_flush()
-                .unwrap()
-                .wait(None)
-                .unwrap();
-            vec![
-                mesh_descriptor_set,
-                // frag_descriptor_set
-            ]
+            let descriptor_set_1 = DescriptorSet::new(
+                app.descriptor_set_allocator.clone(),
+                set_layouts[1].clone(),
+                [WriteDescriptorSet::buffer(0, voxel_buffer.clone())],
+                None,
+            )
+            .unwrap();
+
+            // command_buffer
+            //     .end()
+            //     .unwrap()
+            //     .execute(queue.clone())
+            //     .unwrap()
+            //     .then_signal_fence_and_flush()
+            //     .unwrap()
+            //     .wait(None)
+            //     .unwrap();
+            vec![descriptor_set_0, descriptor_set_1]
         };
         Self {
             pipeline,
             descriptor_sets,
+            gpu_chunk_storage,
         }
     }
 
@@ -309,6 +430,6 @@ impl RenderFacesPipeline {
                 },
             )
             .unwrap();
-        unsafe { builder.draw_mesh_tasks([6, 1, 1]).unwrap() };
+        unsafe { builder.draw_mesh_tasks([1, 1, 1]).unwrap() };
     }
 }

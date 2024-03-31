@@ -22,6 +22,7 @@ mod renderer;
 mod resources;
 mod texture;
 mod types;
+mod utils;
 mod window;
 
 fn run(app: &mut App) {

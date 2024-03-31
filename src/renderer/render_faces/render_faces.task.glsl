@@ -8,7 +8,7 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 // UNIFORMS
 
 struct Block {
-  uvec3 position;  // can be u8 * 3 (Chunk local position)
+  // uvec3 position;  // can be u8 * 3 (Chunk local position)
   uint voxel_offset;
   uint voxel_len;
   uint connected_bits;  // 6 bits, can be u8
@@ -20,9 +20,7 @@ struct Chunk {
 };
 
 layout(std430, set = 0, binding = 0) buffer ChunkBuffer { Chunk chunks[]; };
-layout(std430, set = 0, binding = 1) buffer BlockIndexBuffer {
-  uvec2 indices[];
-};
+layout(std430, set = 0, binding = 1) buffer IndexBuffer { uvec2 indices[]; };
 
 struct VoxelFace {
   vec4 uv;
@@ -50,7 +48,7 @@ taskPayloadSharedEXT Task task;
 
 // Used to implement LOD (TODO)
 uint voxel_count_lod(uint voxels_for_current_block) {
-  const uint LOD_LEVELS[] = {1, 4, 8, 16, 32, 64,
+  const uint LOD_LEVELS[] = {1, 4, 8, 16, 32,
                              /*full*/};
   return voxels_for_current_block;
 }

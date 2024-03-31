@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::renderer::render_faces::GpuChunk;
 use crate::types::{BlockTypeId, Chunk, ChunkPosition, Direction, World};
 use rayon::prelude::*;
 

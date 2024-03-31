@@ -32,7 +32,7 @@ layout(push_constant) uniform PushConstants {
 pc;
 
 struct Task {
-  mat4 model;  // Transformation for the current block
+  vec3 block_position;
   uint voxel_offset;
   uint connected_bits;
 };
@@ -119,7 +119,11 @@ void main() {
       gl_MeshVerticesEXT[baseIndex + j].gl_Position =
           pc.proj * pc.view * vec4(faces[i].vertices[j].position, 1.0);
       // Set other vertex attributes as needed, similar to how it's done in
-      // `generateFace` TODO
+      // `generateFace`
+      v_out[baseIndex + j].position = faces[i].vertices[j].position;
+      v_out[baseIndex + j].normal = faces[i].vertices[j].normal;
+      v_out[baseIndex + j].tex_coords = faces[i].vertices[j].position.xy;
+      v_out[baseIndex + j].texture_index = faces[i].vertices[j].textureIndex;
     }
 
     gl_PrimitiveTriangleIndicesEXT[i * 2] =

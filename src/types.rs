@@ -8,7 +8,7 @@ use std::{
 use crate::texture::TextureRegistry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-#[repr(u32)]
+#[repr(u8)]
 pub enum Direction {
     Up = 0,
     Down,

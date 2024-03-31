@@ -23,17 +23,18 @@ impl App {
         let mut config = VulkanoConfig {
             device_extensions: DeviceExtensions {
                 khr_swapchain: true,
-                // ext_mesh_shader: true,
+                ext_mesh_shader: true,
                 // khr_acceleration_structure: true,
                 // khr_ray_tracing_pipeline: true,
                 // khr_deferred_host_operations: true,
                 ..DeviceExtensions::empty()
             },
             device_features: DeviceFeatures {
-                // dynamic_rendering: true,
+                dynamic_rendering: true,
                 fill_mode_non_solid: true,
-                // mesh_shader: true,
-                // maintenance4: true,
+                mesh_shader: true,
+                task_shader: true,
+                maintenance4: true,
                 ..DeviceFeatures::empty()
             },
             ..Default::default()
@@ -56,17 +57,6 @@ impl App {
             device.clone(),
             Default::default(),
         ));
-
-        let properties = context.device().physical_device().properties();
-        println!(
-            "compute: {:?} {:?}",
-            properties.max_work_group_count, properties.max_work_group_size
-        );
-        println!(
-            "task: {:?} {:?}",
-            properties.max_task_work_group_count, properties.max_task_work_group_size
-        );
-        panic!();
 
         Self {
             context,
