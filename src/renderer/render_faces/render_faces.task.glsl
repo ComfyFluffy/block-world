@@ -8,13 +8,21 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 // UNIFORMS
 
 struct Block {
-  uvec3 position;
+  uvec3 position;  // can be u8 * 3 (Chunk local position)
   uint voxel_offset;
   uint voxel_len;
-  uint connected_bits;  // 6 bits
+  uint connected_bits;  // 6 bits, can be u8
 };
 
-layout(std430, set = 0, binding = 0) buffer BlockBuffer { Block blocks[]; };
+const uint CHUNK_SIZE = 16;
+struct Chunk {
+  Block blocks[CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE];
+};
+
+layout(std430, set = 0, binding = 0) buffer ChunkBuffer { Chunk chunks[]; };
+layout(std430, set = 0, binding = 1) buffer BlockIndexBuffer {
+  uvec2 indices[];
+};
 
 struct VoxelFace {
   vec4 uv;
@@ -48,12 +56,9 @@ uint voxel_count_lod(uint voxels_for_current_block) {
 }
 
 void main() {
-  // use workgroup ID to index ChunkBuffer, and local id to index Chunk::blocks
-  uint chunk_index = gl_WorkGroupID.x;
-  uint block_index = CHUNK_SIZE * CHUNK_SIZE * gl_LocalInvocationID.z +
-                     CHUNK_SIZE * gl_LocalInvocationID.y +
-                     gl_LocalInvocationID.x;
-
+  uvec2 index = indices[gl_GlobalInvocationID.x];
+  uint chunk_index = index.x;
+  uint block_index = index.y;
   Block block = chunks[chunk_index].blocks[block_index];
 
   task.voxel_offset = block.voxel_offset;
