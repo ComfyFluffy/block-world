@@ -117,8 +117,7 @@ void main() {
     uint baseIndex = i * 4;
     for (int j = 0; j < 4; ++j) {
       gl_MeshVerticesEXT[baseIndex + j].gl_Position =
-          pc.proj * pc.view * task.model *
-          vec4(faces[i].vertices[j].position, 1.0);
+          pc.proj * pc.view * vec4(faces[i].vertices[j].position, 1.0);
       // Set other vertex attributes as needed, similar to how it's done in
       // `generateFace` TODO
     }

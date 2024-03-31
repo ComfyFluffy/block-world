@@ -42,6 +42,7 @@ layout(std430, set = 0, binding = 1) buffer VoxelBuffer { Voxel voxels[]; };
 // OUTPUTS
 
 struct Task {
+  mat4 model;  // Transformation for the current block
   uint voxel_offset;
   uint connected_bits;
 };
