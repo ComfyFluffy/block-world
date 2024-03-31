@@ -25,7 +25,7 @@ impl VisibleFace {
     }
 }
 
-fn cull_faces_for_chunk(
+pub fn cull_faces_for_chunk(
     world: &World,
     chunk: &Chunk,
     chunk_position: ChunkPosition,
@@ -53,7 +53,7 @@ fn cull_faces_for_chunk(
         .collect()
 }
 
-fn cull_faces(world: &World) -> HashMap<ChunkPosition, Vec<VisibleFace>> {
+pub fn cull_faces(world: &World) -> HashMap<ChunkPosition, Vec<VisibleFace>> {
     world
         .chunks
         .par_iter()

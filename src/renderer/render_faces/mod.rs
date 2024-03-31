@@ -33,6 +33,14 @@ use vulkano::{
 
 use crate::{types::Direction, window::App};
 
+mod task {
+    vulkano_shaders::shader!(
+        ty: "task",
+        path: "src/renderer/render_faces/render_faces.task.glsl",
+        vulkan_version: "1.3"
+    );
+}
+
 mod mesh {
     vulkano_shaders::shader!(
         ty: "mesh",
@@ -177,34 +185,34 @@ impl RenderFacesPipeline {
             .unwrap()
         };
 
-        let cube_faces: Vec<_> = Direction::ALL
-            .iter()
-            .map(|&direction| mesh::CubeFace {
-                position: [0, 0, 0],
-                direction: direction as u32,
-            })
-            .collect();
+        // let cube_faces: Vec<_> = Direction::ALL
+        //     .iter()
+        //     .map(|&direction| mesh::CubeFace {
+        //         position: [0, 0, 0],
+        //         direction: direction as u32,
+        //     })
+        //     .collect();
 
-        let cube_faces_buffer: Subbuffer<mesh::CubeFaces> = Buffer::new_unsized(
-            app.context.memory_allocator().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            cube_faces.len() as u64,
-        )
-        .unwrap();
-        {
-            let mut guard = cube_faces_buffer.write().unwrap();
-            for (i, face) in cube_faces.iter().enumerate() {
-                guard.cube_faces[i] = *face;
-            }
-        }
+        // let cube_faces_buffer: Subbuffer<mesh::CubeFaces> = Buffer::new_unsized(
+        //     app.context.memory_allocator().clone(),
+        //     BufferCreateInfo {
+        //         usage: BufferUsage::STORAGE_BUFFER,
+        //         ..Default::default()
+        //     },
+        //     AllocationCreateInfo {
+        //         memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+        //             | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+        //         ..Default::default()
+        //     },
+        //     cube_faces.len() as u64,
+        // )
+        // .unwrap();
+        // {
+        //     let mut guard = cube_faces_buffer.write().unwrap();
+        //     for (i, face) in cube_faces.iter().enumerate() {
+        //         guard.cube_faces[i] = *face;
+        //     }
+        // }
 
         let descriptor_sets = {
             let mut command_buffer = RecordingCommandBuffer::new(
@@ -223,7 +231,9 @@ impl RenderFacesPipeline {
             let mesh_descriptor_set = DescriptorSet::new(
                 app.descriptor_set_allocator.clone(),
                 set_layouts[0].clone(),
-                [WriteDescriptorSet::buffer(0, cube_faces_buffer.clone())],
+                [
+                    //WriteDescriptorSet::buffer(0, cube_faces_buffer.clone())
+                    ],
                 None,
             )
             .unwrap();
