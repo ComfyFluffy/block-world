@@ -8,7 +8,6 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 // UNIFORMS
 
 struct Block {
-  // uvec3 position;  // can be u8 * 3 (Chunk local position)
   uint voxel_offset;
   uint voxel_len;
   uint connected_bits;  // 6 bits, can be u8
@@ -24,8 +23,8 @@ layout(std430, set = 0, binding = 1) buffer IndexBuffer { uvec2 indices[]; };
 
 struct VoxelFace {
   vec4 uv;
-  uint texture_id;
-  uint cullface;
+  uint texture_index;
+  bool cullface;
 };
 
 struct Voxel {
@@ -40,7 +39,7 @@ layout(std430, set = 1, binding = 0) buffer VoxelBuffer { Voxel voxels[]; };
 // OUTPUTS
 
 struct Task {
-  mat4 model;  // Transformation for the current block
+  vec3 block_translation;
   uint voxel_offset;
   uint connected_bits;
 };
@@ -61,6 +60,9 @@ void main() {
 
   task.voxel_offset = block.voxel_offset;
   task.connected_bits = block.connected_bits;
+  task.block_translation =  // x, y, z
+      vec3(block_index % CHUNK_SIZE, (block_index / CHUNK_SIZE) % CHUNK_SIZE,
+           block_index / (CHUNK_SIZE * CHUNK_SIZE));
 
   if (block.voxel_len == 0) {
     return;

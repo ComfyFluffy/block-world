@@ -349,32 +349,32 @@ impl RenderFacesPipeline {
                     faces: [
                         Padded(task::VoxelFace {
                             cullface: 6, // none
-                            texture_id: 0,
+                            texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
                             cullface: 6, // none
-                            texture_id: 0,
+                            texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
                             cullface: 6, // none
-                            texture_id: 0,
+                            texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
                             cullface: 6, // none
-                            texture_id: 0,
+                            texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
                             cullface: 6, // none
-                            texture_id: 0,
+                            texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
                             cullface: 6, // none
-                            texture_id: 0,
+                            texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                     ],

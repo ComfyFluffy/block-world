@@ -3,8 +3,8 @@
 layout(location = 0) in VertexOut {
   vec3 position;
   vec3 normal;
-  vec2 texCoord;
-  flat uint textureIndex;
+  vec2 tex_coords;
+  flat uint texture_index;
 }
 v_out;
 

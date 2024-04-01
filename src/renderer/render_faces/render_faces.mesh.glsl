@@ -12,7 +12,7 @@ layout(triangles, max_vertices = 4 * 6, max_primitives = 2 * 6) out;
 
 struct VoxelFace {
   vec4 uv;
-  uint texture_id;
+  uint texture_index;
   bool cullface;
 };
 
@@ -32,11 +32,10 @@ layout(push_constant) uniform PushConstants {
 pc;
 
 struct Task {
-  vec3 block_position;
+  vec3 block_translation;
   uint voxel_offset;
   uint connected_bits;
 };
-
 taskPayloadSharedEXT Task task;
 
 //////////////////////////////////////////////////
@@ -51,53 +50,64 @@ layout(location = 0) out VertexOut {
 v_out[];
 
 //////////////////////////////////////////////////
-struct FaceVertex {
-  vec3 position;
-  vec3 normal;
-  uint textureIndex;
+// Define vertices for each face of the cube with corrected CCW orientation
+const vec3 cube_vertices[6][4] = {
+    // Bottom face (adjusted)
+    {vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 1, 0), vec3(1, 0, 0)},
+    // Top face
+    {vec3(0, 0, 1), vec3(1, 0, 1), vec3(1, 1, 1), vec3(0, 1, 1)},
+    // Front face
+    {vec3(0, 0, 0), vec3(1, 0, 0), vec3(1, 0, 1), vec3(0, 0, 1)},
+    // Back face (adjusted)
+    {vec3(0, 1, 0), vec3(0, 1, 1), vec3(1, 1, 1), vec3(1, 1, 0)},
+    // Left face (adjusted)
+    {vec3(0, 0, 0), vec3(0, 0, 1), vec3(0, 1, 1), vec3(0, 1, 0)},
+    // Right face
+    {vec3(1, 0, 0), vec3(1, 1, 0), vec3(1, 1, 1), vec3(1, 0, 1)},
+};
+
+// Indices and normals remain unchanged
+const uvec3 cube_indices[2] = {
+    uvec3(0, 1, 3),  // Indices for the first triangle of each face
+    uvec3(1, 2, 3),  // Indices for the second triangle of each face
+};
+
+const vec3 cube_normals[6] = {
+    vec3(0, 0, -1),  // Bottom face
+    vec3(0, 0, 1),   // Top face
+    vec3(0, -1, 0),  // Front face
+    vec3(0, 1, 0),   // Back face
+    vec3(-1, 0, 0),  // Left face
+    vec3(1, 0, 0),   // Right face
 };
 
 struct Face {
-  FaceVertex vertices[4];  // Each face has 4 vertices
+  vec3 vertices[4];
+  vec3 normal;
+  vec2 tex_coords[4];
 };
 
-// Function to generate a single face of a voxel and store it in the provided
-// face data structure
-void generateFace(vec3 base, vec3 dir1, vec3 dir2, VoxelFace face,
-                  out Face outFace) {
-  for (int i = 0; i < 4; ++i) {
-    vec3 position = base;
-    if (i == 1 || i == 2) position += dir1;
-    if (i >= 2) position += dir2;
-
-    // Set vertex properties
-    outFace.vertices[i].position = position;
-    outFace.vertices[i].normal = normalize(
-        cross(dir1, dir2));  // Assuming consistent normals for simplicity
-    outFace.vertices[i].textureIndex = face.texture_id;
-  }
-}
-
-// Function to generate all faces of a voxel and emit them
-uint generateVoxelFaces(Voxel voxel, out Face[6] faces) {
+// Function to generate all faces of a voxel
+uint generateVoxelFaces(Voxel voxel, out Face faces[6]) {
   uint faceCount = 0;
 
-  // Directions and vectors defining face orientation
-  vec3 directions[6] = {vec3(0, 1, 0), vec3(0, -1, 0), vec3(0, 0, -1),
-                        vec3(0, 0, 1), vec3(1, 0, 0),  vec3(-1, 0, 0)};
-  vec3 right[6] = {vec3(1, 0, 0),  vec3(1, 0, 0),  vec3(1, 0, 0),
-                   vec3(-1, 0, 0), vec3(0, 0, -1), vec3(0, 0, 1)};
-  vec3 up[6] = {vec3(0, 0, -1), vec3(0, 0, 1), vec3(0, 1, 0),
-                vec3(0, 1, 0),  vec3(0, 1, 0), vec3(0, 1, 0)};
-
   for (int i = 0; i < 6; ++i) {
+    // Skip faces that are connected to other voxels and are culled
     if ((task.connected_bits & (1 << i)) != 0 && voxel.faces[i].cullface) {
       continue;
     }
-    vec3 base = (i % 2 == 0) ? voxel.from : voxel.to;
-    vec3 dir1 = right[i] * (voxel.to - voxel.from);
-    vec3 dir2 = up[i] * (voxel.to - voxel.from);
-    generateFace(base, dir1, dir2, voxel.faces[i], faces[faceCount++]);
+    for (int j = 0; j < 4; ++j) {
+      faces[faceCount].vertices[j] =
+          voxel.from + cube_vertices[i][j] * (voxel.to - voxel.from);
+    }
+    faces[faceCount].normal = cube_normals[i];
+    // TODO
+    faces[faceCount].tex_coords[0] = vec2(0.0, 0.0);
+    faces[faceCount].tex_coords[1] = vec2(1.0, 0.0);
+    faces[faceCount].tex_coords[2] = vec2(1.0, 1.0);
+    faces[faceCount].tex_coords[3] = vec2(0.0, 1.0);
+
+    faceCount++;
   }
   return faceCount;
 }
@@ -110,25 +120,20 @@ void main() {
   Face faces[6];
   uint faceCount = generateVoxelFaces(voxel, faces);
 
-  SetMeshOutputsEXT(4 * faceCount, 2 * faceCount);
+  SetMeshOutputsEXT(faceCount * 4, faceCount * 2);
 
-  // Emit faces
   for (int i = 0; i < faceCount; ++i) {
-    uint baseIndex = i * 4;
-    for (int j = 0; j < 4; ++j) {
-      gl_MeshVerticesEXT[baseIndex + j].gl_Position =
-          pc.proj * pc.view * vec4(faces[i].vertices[j].position, 1.0);
-      // Set other vertex attributes as needed, similar to how it's done in
-      // `generateFace`
-      v_out[baseIndex + j].position = faces[i].vertices[j].position;
-      v_out[baseIndex + j].normal = faces[i].vertices[j].normal;
-      v_out[baseIndex + j].tex_coords = faces[i].vertices[j].position.xy;
-      v_out[baseIndex + j].texture_index = faces[i].vertices[j].textureIndex;
-    }
+    gl_PrimitiveTriangleIndicesEXT[i * 2] = cube_indices[0];
+    gl_PrimitiveTriangleIndicesEXT[i * 2 + 1] = cube_indices[1];
 
-    gl_PrimitiveTriangleIndicesEXT[i * 2] =
-        uvec3(baseIndex, baseIndex + 1, baseIndex + 2);
-    gl_PrimitiveTriangleIndicesEXT[i * 2 + 1] =
-        uvec3(baseIndex, baseIndex + 2, baseIndex + 3);
+    for (int j = 0; j < 4; ++j) {
+      vec4 vertex = pc.proj * pc.view *
+                    vec4(faces[i].vertices[j] + task.block_translation, 1.0);
+      gl_MeshVerticesEXT[i * 4 + j].gl_Position = vertex;
+      v_out[i * 4 + j].position = faces[i].vertices[j];
+      v_out[i * 4 + j].normal = faces[i].normal;
+      v_out[i * 4 + j].tex_coords = faces[i].tex_coords[j];
+      v_out[i * 4 + j].texture_index = voxel.faces[i].texture_index;
+    }
   }
 }
