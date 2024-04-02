@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use cgmath::num_traits::Pow;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{CopyBufferToImageInfo, RecordingCommandBuffer},
@@ -82,7 +83,7 @@ impl GpuChunkStorage {
             },
             AllocationCreateInfo {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             chunks,
@@ -263,7 +264,7 @@ impl RenderFacesPipeline {
                     stages: stages.into_iter().collect(),
                     viewport_state: Some(ViewportState::default()),
                     rasterization_state: Some(RasterizationState {
-                        cull_mode: CullMode::None,
+                        // cull_mode: CullMode::None,
                         ..Default::default()
                     }),
                     multisample_state: Some(MultisampleState::default()),
@@ -287,17 +288,15 @@ impl RenderFacesPipeline {
         };
 
         let mut gpu_chunk_storage = GpuChunkStorage::new(app.context.memory_allocator().clone(), 1);
-        gpu_chunk_storage.update(
-            ChunkPosition { x: 0, z: 0 },
-            [ChunkUpdate {
-                block: Some(GpuBlock {
-                    voxel_offset: 0,
-                    voxel_len: 1,
-                    connected_bits: 0,
-                }),
-                block_index: 0,
-            }],
-        );
+        let chunk_updates = (0..16 * 16 * 16).map(|i| ChunkUpdate {
+            block_index: i,
+            block: Some(GpuBlock {
+                voxel_offset: 0,
+                voxel_len: 2,
+                connected_bits: 0,
+            }),
+        });
+        gpu_chunk_storage.update(ChunkPosition { x: 0, z: 0 }, chunk_updates);
         gpu_chunk_storage.upload_indices();
 
         let descriptor_sets = {
@@ -336,7 +335,7 @@ impl RenderFacesPipeline {
                         | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
-                1,
+                2,
             )
             .unwrap();
 
@@ -345,32 +344,32 @@ impl RenderFacesPipeline {
                 voxel_write.voxels[0] = task::Voxel {
                     faces: [
                         Padded(task::VoxelFace {
-                            cullface: 6, // none
+                            cullface: 1,
                             texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
-                            cullface: 6, // none
+                            cullface: 1,
                             texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
-                            cullface: 6, // none
+                            cullface: 1,
                             texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
-                            cullface: 6, // none
+                            cullface: 1,
                             texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
-                            cullface: 6, // none
+                            cullface: 1,
                             texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
                         Padded(task::VoxelFace {
-                            cullface: 6, // none
+                            cullface: 6,
                             texture_index: 0,
                             uv: [0.0, 0.0, 1.0, 1.0],
                         }),
@@ -378,6 +377,9 @@ impl RenderFacesPipeline {
                     from: Padded([0.0, 0.0, 0.0]),
                     to: Padded([1.0, 1.0, 1.0]),
                 };
+                voxel_write.voxels[1] = voxel_write.voxels[0];
+                voxel_write.voxels[1].from = Padded([0.5, 0.5, 0.5]);
+                voxel_write.voxels[1].to = Padded([1.5, 1.5, 1.5]);
             }
 
             let descriptor_set_1 = DescriptorSet::new(
@@ -461,6 +463,6 @@ impl RenderFacesPipeline {
                 },
             )
             .unwrap();
-        unsafe { builder.draw_mesh_tasks([1, 1, 1]).unwrap() };
+        unsafe { builder.draw_mesh_tasks([16u32.pow(3), 1, 1]).unwrap() };
     }
 }

@@ -45,7 +45,7 @@ struct Task {
 };
 taskPayloadSharedEXT Task task;
 
-// Used to implement LOD (TODO)
+// TODO: Used to implement LOD
 uint voxel_count_lod(uint voxels_for_current_block) {
   const uint LOD_LEVELS[] = {1, 4, 8, 16, 32,
                              /*full*/};

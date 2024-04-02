@@ -102,7 +102,7 @@ uint generateVoxelFaces(Voxel voxel, out Face faces[6]) {
           voxel.from + cube_vertices[i][j] * (voxel.to - voxel.from);
     }
     faces[faceCount].normal = cube_normals[i];
-    // TODO
+    // TODO: calculate tex_coords
     faces[faceCount].tex_coords[0] = vec2(0.0, 0.0);
     faces[faceCount].tex_coords[1] = vec2(1.0, 0.0);
     faces[faceCount].tex_coords[2] = vec2(1.0, 1.0);
@@ -124,8 +124,8 @@ void main() {
   SetMeshOutputsEXT(faceCount * 4, faceCount * 2);
 
   for (int i = 0; i < faceCount; ++i) {
-    gl_PrimitiveTriangleIndicesEXT[i * 2] = cube_indices[0];
-    gl_PrimitiveTriangleIndicesEXT[i * 2 + 1] = cube_indices[1];
+    gl_PrimitiveTriangleIndicesEXT[i * 2] = cube_indices[0] + i * 4;
+    gl_PrimitiveTriangleIndicesEXT[i * 2 + 1] = cube_indices[1] + i * 4;
 
     for (int j = 0; j < 4; ++j) {
       vec4 vertex = vec4(faces[i].vertices[j] + task.block_translation, 1.0);

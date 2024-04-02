@@ -51,8 +51,8 @@ pub fn draw(
                 load_op: AttachmentLoadOp::Clear,
                 store_op: AttachmentStoreOp::Store,
                 clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
-                resolve_info: Some(RenderingAttachmentResolveInfo::image_view(dst_image)),
-                ..RenderingAttachmentInfo::image_view(msaa_color_image)
+                // resolve_info: Some(RenderingAttachmentResolveInfo::image_view(dst_image)),
+                ..RenderingAttachmentInfo::image_view(dst_image)
             })],
             depth_attachment: Some(RenderingAttachmentInfo {
                 load_op: AttachmentLoadOp::Clear,

@@ -67,7 +67,7 @@ fn run(app: &mut App) {
         let elapsed = render_start.elapsed().as_secs_f32();
         let position = cgmath::Point3::new(
             (elapsed * 0.5).sin() * 3.0,
-            1.0,
+            elapsed.sin() * 3.0,
             (elapsed * 0.5).cos() * 3.0,
         );
         Camera {
@@ -89,7 +89,7 @@ fn run(app: &mut App) {
         .image()
         .extent();
 
-    let samples = SampleCount::Sample4;
+    let samples = SampleCount::Sample1;
 
     let depth_image = ImageView::new_default(
         Image::new(
