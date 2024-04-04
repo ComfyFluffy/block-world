@@ -5,15 +5,11 @@ use std::{
 
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{
-        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsage, CopyBufferToImageInfo,
-        RecordingCommandBuffer,
-    },
+    command_buffer::{CopyBufferToImageInfo, RecordingCommandBuffer},
     descriptor_set::{DescriptorSet, WriteDescriptorSet},
     device::Queue,
     format::Format,
     image::{
-        sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo},
         view::{ImageView, ImageViewCreateInfo, ImageViewType},
         Image, ImageCreateInfo, ImageType, ImageUsage,
     },
@@ -155,6 +151,7 @@ impl GpuChunkStorage {
     // pub fn upload_indices_with_culling(&self, frustum: Frustum) {}
 }
 
+#[derive(Debug, Clone)]
 pub struct Camera {
     pub view: cgmath::Matrix4<f32>,
     pub proj: cgmath::Matrix4<f32>,
@@ -391,6 +388,35 @@ impl RenderFacesPipeline {
             )
             .unwrap();
 
+            let motion_vector_image = ImageView::new_default(
+                Image::new(
+                    app.memory_allocator(),
+                    ImageCreateInfo {
+                        image_type: ImageType::Dim2d,
+                        extent: [1, 1, 1], // FIXME
+                        format: Format::R16G16_SFLOAT,
+                        usage: ImageUsage::STORAGE,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                        ..Default::default()
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let descriptor_set_2 = DescriptorSet::new(
+                app.descriptor_set_allocator.clone(),
+                set_layouts[2].clone(),
+                [WriteDescriptorSet::image_view(
+                    0,
+                    motion_vector_image.clone(),
+                )],
+                None,
+            )
+            .unwrap();
+
             // command_buffer
             //     .end()
             //     .unwrap()
@@ -400,7 +426,7 @@ impl RenderFacesPipeline {
             //     .unwrap()
             //     .wait(None)
             //     .unwrap();
-            vec![descriptor_set_0, descriptor_set_1]
+            vec![descriptor_set_0, descriptor_set_1, descriptor_set_2]
         };
         Self {
             pipeline,
@@ -409,7 +435,12 @@ impl RenderFacesPipeline {
         }
     }
 
-    pub fn render_cube_faces(&self, builder: &mut RecordingCommandBuffer, camera: &Camera) {
+    pub fn render_cube_faces(
+        &self,
+        builder: &mut RecordingCommandBuffer,
+        previous_camera: &Camera,
+        camera: &Camera,
+    ) {
         builder
             .bind_pipeline_graphics(self.pipeline.clone())
             .unwrap()
@@ -424,8 +455,8 @@ impl RenderFacesPipeline {
                 self.pipeline.layout().clone(),
                 0,
                 mesh::PushConstants {
-                    view: camera.view.into(),
-                    proj: camera.proj.into(),
+                    current_view_proj: (camera.proj * camera.view).into(),
+                    previous_view_proj: (previous_camera.proj * previous_camera.view).into(),
                     camera_pos: camera.position.into(),
                 },
             )

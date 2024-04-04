@@ -130,8 +130,12 @@ fn run(app: &mut App) {
     .unwrap();
 
     let command_buffer_allocator = app.command_buffer_allocator.clone();
-    let redraw = |renderer: &mut VulkanoWindowRenderer| {
+    let mut previous_camera = camera_fn();
+    let mut redraw = |renderer: &mut VulkanoWindowRenderer| {
         let before = renderer.acquire(None, |_| {}).unwrap();
+
+        let camera = camera_fn();
+        previous_camera = camera.clone();
 
         let after = draw(
             before,
@@ -141,7 +145,7 @@ fn run(app: &mut App) {
             renderer.swapchain_image_view(),
             depth_image.clone(),
             |builder| {
-                render_faces_pipeline.render_cube_faces(builder, &camera_fn());
+                render_faces_pipeline.render_cube_faces(builder, &previous_camera, &camera);
             },
         );
         renderer.present(after, true);
