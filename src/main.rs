@@ -57,7 +57,7 @@ fn run(app: &mut App) {
                     .unwrap()
                     .swapchain_format(),
             )],
-            depth_attachment_format: Some(Format::D32_SFLOAT),
+            depth_attachment_format: Some(Format::D16_UNORM),
             ..Default::default()
         },
     );
@@ -97,7 +97,7 @@ fn run(app: &mut App) {
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
                 extent: [extent[0], extent[1], 1],
-                format: Format::D32_SFLOAT,
+                format: Format::D16_UNORM,
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
                 samples,
                 ..Default::default()
