@@ -10,8 +10,8 @@ use fsr_sys::{
 };
 use log::{error, warn};
 use vulkano::{
-    command_buffer::CommandBuffer, device::Device, format::Format, image::view::ImageView, Handle,
-    VulkanObject,
+    command_buffer::sys::RawRecordingCommandBuffer, device::Device, format::Format,
+    image::view::ImageView, Handle, VulkanObject,
 };
 use widestring::{widecstr, WideCStr};
 
@@ -135,7 +135,7 @@ impl FsrContextVulkan {
 
     pub unsafe fn dispatch(
         &mut self,
-        command_buffer: &CommandBuffer,
+        command_buffer: &RawRecordingCommandBuffer,
         color: &ImageView,
         depth: &ImageView,
         motion_vector: &ImageView,

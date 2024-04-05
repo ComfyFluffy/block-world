@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
@@ -18,12 +18,14 @@ use vulkano_util::{
     window::VulkanoWindows,
 };
 
-pub(crate) struct App {
+pub struct App {
     pub context: VulkanoContext,
     pub windows: VulkanoWindows,
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     pub descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     _debug_callback: DebugUtilsMessenger,
+
+    pub validation_error_encountered: Arc<AtomicBool>,
 }
 
 impl App {
@@ -44,6 +46,8 @@ impl App {
                 task_shader: true,
                 maintenance4: true,
                 fragment_stores_and_atomics: true,
+                shader_int16: true,
+                shader_float16: true,
                 ..DeviceFeatures::empty()
             },
             instance_create_info: InstanceCreateInfo {
@@ -76,8 +80,10 @@ impl App {
             device.clone(),
             Default::default(),
         ));
+        let validation_error_encountered = Arc::new(AtomicBool::new(false));
 
         let debug_callback = unsafe {
+            let validation_error_encountered = validation_error_encountered.clone();
             DebugUtilsMessenger::new(
                 context.instance().clone(),
                 DebugUtilsMessengerCreateInfo {
@@ -90,7 +96,7 @@ impl App {
                         | DebugUtilsMessageType::PERFORMANCE,
                     ..DebugUtilsMessengerCreateInfo::user_callback(
                         DebugUtilsMessengerCallback::new(
-                            |message_severity, message_type, callback_data| {
+                            move |message_severity, message_type, callback_data| {
                                 use log::{debug, error, info, warn};
 
                                 // Determine the message type
@@ -116,7 +122,8 @@ impl App {
                                         "{}: {}: {}",
                                         message_id_name, ty, callback_data.message
                                     );
-                                    std::process::exit(1);
+                                    validation_error_encountered
+                                        .store(true, std::sync::atomic::Ordering::Relaxed);
                                 } else if message_severity
                                     .intersects(DebugUtilsMessageSeverity::WARNING)
                                 {
@@ -142,6 +149,7 @@ impl App {
             command_buffer_allocator,
             descriptor_set_allocator,
             _debug_callback: debug_callback,
+            validation_error_encountered,
         }
     }
 

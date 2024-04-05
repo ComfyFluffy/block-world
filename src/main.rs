@@ -2,17 +2,21 @@ use std::{env, time::Instant};
 
 use app::App;
 use fsr::FsrContextVulkan;
-use log::info;
+use log::{debug, info};
 use renderer::{
     draw,
     render_faces::{Camera, RenderFacesPipeline},
 };
 use vulkano::{
+    command_buffer::{
+        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsage, RecordingCommandBuffer,
+    },
     format::Format,
     image::{view::ImageView, Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount},
     memory::allocator::AllocationCreateInfo,
     pipeline::graphics::{subpass::PipelineRenderingCreateInfo, viewport::Viewport},
     sync::GpuFuture,
+    VulkanObject,
 };
 use vulkano_util::{renderer::VulkanoWindowRenderer, window::WindowDescriptor};
 use winit::{
@@ -42,7 +46,9 @@ fn run(app: &mut App) {
             resizable: false,
             ..Default::default()
         },
-        |_create_info| {
+        |create_info| {
+            create_info.image_usage =
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::STORAGE | ImageUsage::SAMPLED;
             // create_info.image_format = Format::R16G16B16A16_SFLOAT;
             // create_info.image_color_space = ColorSpace::ExtendedSrgbLinear;
         },
@@ -131,7 +137,7 @@ fn run(app: &mut App) {
                     .get_renderer(window_id)
                     .unwrap()
                     .swapchain_format(),
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::STORAGE,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
                 samples,
                 ..Default::default()
             },
@@ -140,6 +146,11 @@ fn run(app: &mut App) {
         .unwrap(),
     )
     .unwrap();
+    debug!(
+        "Color image view: {:?}, image: {:?}",
+        color_image.handle(),
+        color_image.image().handle()
+    );
 
     let depth_image = ImageView::new_default(
         Image::new(
@@ -148,7 +159,7 @@ fn run(app: &mut App) {
                 image_type: ImageType::Dim2d,
                 extent: render_size_extent,
                 format: Format::D16_UNORM,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::SAMPLED,
                 samples,
                 ..Default::default()
             },
@@ -157,6 +168,11 @@ fn run(app: &mut App) {
         .unwrap(),
     )
     .unwrap();
+    debug!(
+        "Depth image view: {:?}, image: {:?}",
+        depth_image.handle(),
+        depth_image.image().handle()
+    );
 
     let motion_vector_image = ImageView::new_default(
         Image::new(
@@ -165,7 +181,7 @@ fn run(app: &mut App) {
                 image_type: ImageType::Dim2d,
                 extent: render_size_extent,
                 format: Format::R16G16_SFLOAT,
-                usage: ImageUsage::COLOR_ATTACHMENT,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
                 samples,
                 ..Default::default()
             },
@@ -174,9 +190,15 @@ fn run(app: &mut App) {
         .unwrap(),
     )
     .unwrap();
+    debug!(
+        "Motion vector image view: {:?}, image: {:?}",
+        motion_vector_image.handle(),
+        motion_vector_image.image().handle()
+    );
 
     let mut fsr_context =
         unsafe { FsrContextVulkan::new(app.context.device(), render_size, display_size) };
+    info!("FsrContextVulkan created");
 
     let command_buffer_allocator = app.command_buffer_allocator.clone();
     let mut previous_camera = camera_fn();
@@ -194,10 +216,27 @@ fn run(app: &mut App) {
             ..Default::default()
         };
 
-        let command_buffer = draw(
+        let mut builder = RecordingCommandBuffer::new(
             command_buffer_allocator.clone(),
+            queue.queue_family_index(),
+            CommandBufferLevel::Primary,
+            CommandBufferBeginInfo {
+                usage: CommandBufferUsage::OneTimeSubmit,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        debug!(
+            "Swapchain image view: {:?}, image: {:?}",
+            renderer.swapchain_image_view().handle(),
+            renderer.swapchain_image_view().image().handle()
+        );
+
+        draw(
+            &mut builder,
             queue.clone(),
-            color_image.clone(),
+            renderer.swapchain_image_view(),
             motion_vector_image.clone(),
             depth_image.clone(),
             viewport,
@@ -207,6 +246,17 @@ fn run(app: &mut App) {
         );
         previous_camera = camera.clone();
 
+        let fsr_command_buffer = RecordingCommandBuffer::new(
+            command_buffer_allocator.clone(),
+            queue.queue_family_index(),
+            CommandBufferLevel::Primary,
+            CommandBufferBeginInfo {
+                usage: CommandBufferUsage::OneTimeSubmit,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
         let elapsed = frame_time.elapsed();
         frame_time = Instant::now();
         print!(
@@ -215,9 +265,13 @@ fn run(app: &mut App) {
             1.0 / elapsed.as_secs_f32()
         );
 
-        unsafe {
+        let fsr_command_buffer = unsafe {
+            debug!(
+                "fsr_command_buffer: {:?}",
+                fsr_command_buffer.raw().handle()
+            );
             fsr_context.dispatch(
-                &command_buffer,
+                &fsr_command_buffer.raw(),
                 &color_image,
                 &depth_image,
                 &motion_vector_image,
@@ -225,10 +279,16 @@ fn run(app: &mut App) {
                 elapsed.as_millis() as f32,
                 camera,
             );
-        }
+            debug!("Recording command buffer");
+            fsr_command_buffer.end().unwrap()
+        };
+
+        let command_buffer = builder.end().unwrap();
 
         let after = before
             .then_execute(queue.clone(), command_buffer)
+            .unwrap()
+            .then_execute(queue.clone(), fsr_command_buffer)
             .unwrap()
             .boxed();
         renderer.present(after, true);
@@ -248,6 +308,12 @@ fn run(app: &mut App) {
                     }
                     WindowEvent::RedrawRequested => {
                         redraw(renderer);
+                        if app
+                            .validation_error_encountered
+                            .load(std::sync::atomic::Ordering::Relaxed)
+                        {
+                            panic!("Validation error encountered");
+                        }
                     }
                     _ => {}
                 },

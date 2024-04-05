@@ -17,25 +17,14 @@ use vulkano::{
 };
 
 pub fn draw(
-    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    mut builder: &mut RecordingCommandBuffer,
     queue: Arc<Queue>,
     dst_image: Arc<ImageView>,
     motion_vector_image: Arc<ImageView>,
     depth_image: Arc<ImageView>,
     viewport: Viewport,
     record_fn: impl FnOnce(&mut RecordingCommandBuffer),
-) -> Arc<CommandBuffer> {
-    let mut builder = RecordingCommandBuffer::new(
-        command_buffer_allocator.clone(),
-        queue.queue_family_index(),
-        CommandBufferLevel::Primary,
-        CommandBufferBeginInfo {
-            usage: CommandBufferUsage::OneTimeSubmit,
-            ..Default::default()
-        },
-    )
-    .unwrap();
-
+) {
     builder
         .begin_rendering(RenderingInfo {
             color_attachments: vec![
@@ -69,6 +58,4 @@ pub fn draw(
     record_fn(&mut builder);
 
     builder.end_rendering().unwrap();
-
-    builder.end().unwrap()
 }
