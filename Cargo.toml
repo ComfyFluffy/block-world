@@ -20,5 +20,8 @@ indexmap = "2.2.3"
 rayon = "1.8.1"
 image = "0.25.0"
 png = "0.17.13"
+fsr-sys = { path = "../fsr-rs/fsr-sys", features = ["vulkan"] }
+wchar = "0.11.0"
+
 [profile.release]
 debug = true

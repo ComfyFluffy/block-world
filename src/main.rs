@@ -17,6 +17,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
+mod fsr;
 mod model;
 mod renderer;
 mod resources;
