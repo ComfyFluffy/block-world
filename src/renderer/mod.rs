@@ -5,28 +5,26 @@ use std::sync::Arc;
 
 use vulkano::{
     command_buffer::{
-        allocator::StandardCommandBufferAllocator, CommandBufferBeginInfo, CommandBufferLevel,
-        CommandBufferUsage, RecordingCommandBuffer, RenderingAttachmentInfo,
-        RenderingAttachmentResolveInfo, RenderingInfo,
+        allocator::StandardCommandBufferAllocator, CommandBuffer, CommandBufferBeginInfo,
+        CommandBufferLevel, CommandBufferUsage, RecordingCommandBuffer, RenderingAttachmentInfo,
+        RenderingInfo,
     },
     device::Queue,
     format::ClearValue,
     image::view::ImageView,
     pipeline::graphics::viewport::Viewport,
     render_pass::{AttachmentLoadOp, AttachmentStoreOp},
-    sync::GpuFuture,
 };
 
 pub fn draw(
-    before: Box<dyn GpuFuture>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     queue: Arc<Queue>,
-    // msaa_color_image: Arc<ImageView>,
     dst_image: Arc<ImageView>,
     motion_vector_image: Arc<ImageView>,
     depth_image: Arc<ImageView>,
+    viewport: Viewport,
     record_fn: impl FnOnce(&mut RecordingCommandBuffer),
-) -> Box<dyn GpuFuture> {
+) -> Arc<CommandBuffer> {
     let mut builder = RecordingCommandBuffer::new(
         command_buffer_allocator.clone(),
         queue.queue_family_index(),
@@ -38,21 +36,13 @@ pub fn draw(
     )
     .unwrap();
 
-    let viewport: Viewport = {
-        let extent = dst_image.image().extent();
-        Viewport {
-            extent: [extent[0] as f32, extent[1] as f32],
-            ..Default::default()
-        }
-    };
-
     builder
         .begin_rendering(RenderingInfo {
             color_attachments: vec![
                 Some(RenderingAttachmentInfo {
                     load_op: AttachmentLoadOp::Clear,
                     store_op: AttachmentStoreOp::Store,
-                    clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
+                    clear_value: Some([0.5, 0.0, 0.0, 1.0].into()),
                     // resolve_info: Some(RenderingAttachmentResolveInfo::image_view(dst_image)),
                     ..RenderingAttachmentInfo::image_view(dst_image)
                 }),
@@ -80,7 +70,5 @@ pub fn draw(
 
     builder.end_rendering().unwrap();
 
-    let command_buffer = builder.end().unwrap();
-
-    before.then_execute(queue, command_buffer).unwrap().boxed()
+    builder.end().unwrap()
 }

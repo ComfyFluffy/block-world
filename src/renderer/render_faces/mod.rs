@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use cgmath::num_traits::Pow;
+use cgmath::Deg;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{CopyBufferToImageInfo, RecordingCommandBuffer},
@@ -23,7 +23,7 @@ use vulkano::{
             multisample::MultisampleState,
             rasterization::{CullMode, RasterizationState},
             subpass::PipelineRenderingCreateInfo,
-            viewport::ViewportState,
+            viewport::{Scissor, Viewport, ViewportState},
             GraphicsPipelineCreateInfo,
         },
         layout::PipelineDescriptorSetLayoutCreateInfo,
@@ -31,7 +31,7 @@ use vulkano::{
     },
 };
 
-use crate::{types::ChunkPosition, window::App};
+use crate::{app::App, types::ChunkPosition};
 
 mod task {
     vulkano_shaders::shader!(
@@ -157,6 +157,9 @@ pub struct Camera {
     pub view: cgmath::Matrix4<f32>,
     pub proj: cgmath::Matrix4<f32>,
     pub position: cgmath::Point3<f32>,
+    pub near: f32,
+    pub far: f32,
+    pub fovy: Deg<f32>,
 }
 
 fn upload_png(
@@ -227,7 +230,6 @@ impl RenderFacesPipeline {
         app: &App,
         queue: Arc<Queue>,
         rendering_info: PipelineRenderingCreateInfo,
-        motion_vector_image_extent: [u32; 3],
     ) -> RenderFacesPipeline {
         let pipeline = {
             let device = queue.device().clone();
@@ -391,34 +393,6 @@ impl RenderFacesPipeline {
             )
             .unwrap();
 
-            let motion_vector_image = ImageView::new_default(
-                Image::new(
-                    app.memory_allocator(),
-                    ImageCreateInfo {
-                        image_type: ImageType::Dim2d,
-                        extent: motion_vector_image_extent,
-                        format: Format::R16G16_SFLOAT,
-                        usage: ImageUsage::STORAGE,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo {
-                        memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-                        ..Default::default()
-                    },
-                )
-                .unwrap(),
-            )
-            .unwrap();
-
-            // command_buffer
-            //     .end()
-            //     .unwrap()
-            //     .execute(queue.clone())
-            //     .unwrap()
-            //     .then_signal_fence_and_flush()
-            //     .unwrap()
-            //     .wait(None)
-            //     .unwrap();
             vec![descriptor_set_0, descriptor_set_1]
         };
         Self {
