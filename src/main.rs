@@ -47,19 +47,31 @@ fn run(app: &mut App) {
 
     let queue = app.context.graphics_queue().clone();
 
+    let extent = app
+        .windows
+        .get_renderer_mut(window_id)
+        .unwrap()
+        .swapchain_image_view()
+        .image()
+        .extent();
+
     let render_faces_pipeline = RenderFacesPipeline::new(
         &app,
         queue.clone(),
         PipelineRenderingCreateInfo {
-            color_attachment_formats: vec![Some(
-                app.windows
-                    .get_renderer(window_id)
-                    .unwrap()
-                    .swapchain_format(),
-            )],
+            color_attachment_formats: vec![
+                Some(
+                    app.windows
+                        .get_renderer(window_id)
+                        .unwrap()
+                        .swapchain_format(),
+                ),
+                Some(Format::R16G16_SFLOAT),
+            ],
             depth_attachment_format: Some(Format::D16_UNORM),
             ..Default::default()
         },
+        extent,
     );
 
     let render_start = Instant::now();
@@ -81,14 +93,6 @@ fn run(app: &mut App) {
         }
     };
 
-    let extent = app
-        .windows
-        .get_renderer_mut(window_id)
-        .unwrap()
-        .swapchain_image_view()
-        .image()
-        .extent();
-
     let samples = SampleCount::Sample1;
 
     let depth_image = ImageView::new_default(
@@ -108,18 +112,14 @@ fn run(app: &mut App) {
     )
     .unwrap();
 
-    let msaa_color_image = ImageView::new_default(
+    let motion_vector_image = ImageView::new_default(
         Image::new(
             app.memory_allocator(),
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
                 extent: [extent[0], extent[1], 1],
-                format: app
-                    .windows
-                    .get_renderer(window_id)
-                    .unwrap()
-                    .swapchain_format(),
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
+                format: Format::R16G16_SFLOAT,
+                usage: ImageUsage::COLOR_ATTACHMENT,
                 samples,
                 ..Default::default()
             },
@@ -135,19 +135,22 @@ fn run(app: &mut App) {
         let before = renderer.acquire(None, |_| {}).unwrap();
 
         let camera = camera_fn();
-        previous_camera = camera.clone();
 
         let after = draw(
             before,
             command_buffer_allocator.clone(),
             queue.clone(),
-            msaa_color_image.clone(),
+            // msaa_color_image.clone(),
             renderer.swapchain_image_view(),
+            motion_vector_image.clone(),
             depth_image.clone(),
             |builder| {
                 render_faces_pipeline.render_cube_faces(builder, &previous_camera, &camera);
             },
         );
+
+        previous_camera = camera.clone();
+
         renderer.present(after, true);
     };
 

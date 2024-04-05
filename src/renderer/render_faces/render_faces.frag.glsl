@@ -10,14 +10,11 @@ layout(location = 0) in VertexOut {
 v_out;
 
 layout(location = 0) out vec4 frag_color;
-
-layout(set = 2, binding = 0, rg16f) uniform image2D motion_vector;
+layout(location = 1) out vec2 motion_vector;
 
 void main() {
-  vec2 motionVector = v_out.previous_position.xy / v_out.previous_position.w -
-                      v_out.current_position.xy / v_out.current_position.w;
-  imageStore(motion_vector, ivec2(gl_FragCoord.xy),
-             vec4(motionVector, 0.0, 0.0));
+  motion_vector = v_out.previous_position.xy / v_out.previous_position.w -
+                  v_out.current_position.xy / v_out.current_position.w;
 
   // Map each component from [-1, 1] to [0, 1]
   vec3 color = v_out.normal * 0.5 + 0.5;

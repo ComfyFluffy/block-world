@@ -21,8 +21,9 @@ pub fn draw(
     before: Box<dyn GpuFuture>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     queue: Arc<Queue>,
-    msaa_color_image: Arc<ImageView>,
+    // msaa_color_image: Arc<ImageView>,
     dst_image: Arc<ImageView>,
+    motion_vector_image: Arc<ImageView>,
     depth_image: Arc<ImageView>,
     record_fn: impl FnOnce(&mut RecordingCommandBuffer),
 ) -> Box<dyn GpuFuture> {
@@ -38,7 +39,7 @@ pub fn draw(
     .unwrap();
 
     let viewport: Viewport = {
-        let extent = msaa_color_image.image().extent();
+        let extent = dst_image.image().extent();
         Viewport {
             extent: [extent[0] as f32, extent[1] as f32],
             ..Default::default()
@@ -47,13 +48,21 @@ pub fn draw(
 
     builder
         .begin_rendering(RenderingInfo {
-            color_attachments: vec![Some(RenderingAttachmentInfo {
-                load_op: AttachmentLoadOp::Clear,
-                store_op: AttachmentStoreOp::Store,
-                clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
-                // resolve_info: Some(RenderingAttachmentResolveInfo::image_view(dst_image)),
-                ..RenderingAttachmentInfo::image_view(dst_image)
-            })],
+            color_attachments: vec![
+                Some(RenderingAttachmentInfo {
+                    load_op: AttachmentLoadOp::Clear,
+                    store_op: AttachmentStoreOp::Store,
+                    clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
+                    // resolve_info: Some(RenderingAttachmentResolveInfo::image_view(dst_image)),
+                    ..RenderingAttachmentInfo::image_view(dst_image)
+                }),
+                Some(RenderingAttachmentInfo {
+                    load_op: AttachmentLoadOp::Clear,
+                    store_op: AttachmentStoreOp::Store,
+                    clear_value: Some([0.0, 0.0, 0.0, 0.0].into()),
+                    ..RenderingAttachmentInfo::image_view(motion_vector_image)
+                }),
+            ],
             depth_attachment: Some(RenderingAttachmentInfo {
                 load_op: AttachmentLoadOp::Clear,
                 store_op: AttachmentStoreOp::DontCare,

@@ -227,6 +227,7 @@ impl RenderFacesPipeline {
         app: &App,
         queue: Arc<Queue>,
         rendering_info: PipelineRenderingCreateInfo,
+        motion_vector_image_extent: [u32; 3],
     ) -> RenderFacesPipeline {
         let pipeline = {
             let device = queue.device().clone();
@@ -395,7 +396,7 @@ impl RenderFacesPipeline {
                     app.memory_allocator(),
                     ImageCreateInfo {
                         image_type: ImageType::Dim2d,
-                        extent: [1, 1, 1], // FIXME
+                        extent: motion_vector_image_extent,
                         format: Format::R16G16_SFLOAT,
                         usage: ImageUsage::STORAGE,
                         ..Default::default()
@@ -408,16 +409,6 @@ impl RenderFacesPipeline {
                 .unwrap(),
             )
             .unwrap();
-            let descriptor_set_2 = DescriptorSet::new(
-                app.descriptor_set_allocator.clone(),
-                set_layouts[2].clone(),
-                [WriteDescriptorSet::image_view(
-                    0,
-                    motion_vector_image.clone(),
-                )],
-                None,
-            )
-            .unwrap();
 
             // command_buffer
             //     .end()
@@ -428,7 +419,7 @@ impl RenderFacesPipeline {
             //     .unwrap()
             //     .wait(None)
             //     .unwrap();
-            vec![descriptor_set_0, descriptor_set_1, descriptor_set_2]
+            vec![descriptor_set_0, descriptor_set_1]
         };
         Self {
             pipeline,

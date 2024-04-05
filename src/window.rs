@@ -35,6 +35,7 @@ impl App {
                 mesh_shader: true,
                 task_shader: true,
                 maintenance4: true,
+                fragment_stores_and_atomics: true,
                 ..DeviceFeatures::empty()
             },
             ..Default::default()
