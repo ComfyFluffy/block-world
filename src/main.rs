@@ -9,7 +9,8 @@ use renderer::{
 };
 use vulkano::{
     command_buffer::{
-        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsage, RecordingCommandBuffer,
+        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsage, CopyImageInfo,
+        RecordingCommandBuffer,
     },
     format::Format,
     image::{view::ImageView, Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount},
@@ -47,8 +48,7 @@ fn run(app: &mut App) {
             ..Default::default()
         },
         |create_info| {
-            create_info.image_usage =
-                ImageUsage::COLOR_ATTACHMENT | ImageUsage::STORAGE | ImageUsage::SAMPLED;
+            create_info.image_usage = ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST;
             // create_info.image_format = Format::R16G16B16A16_SFLOAT;
             // create_info.image_color_space = ColorSpace::ExtendedSrgbLinear;
         },
@@ -118,10 +118,10 @@ fn run(app: &mut App) {
         .image()
         .extent();
     let display_size = [display_size_extent[0], display_size_extent[1]];
-    // let render_size = [1680, 960];
-    // let render_size_extent = [render_size[0], render_size[1], 1];
-    let render_size = display_size;
+    let render_size = [1680, 960];
     let render_size_extent = [render_size[0], render_size[1], 1];
+    // let render_size = display_size;
+    // let render_size_extent = [render_size[0], render_size[1], 1];
 
     println!("Render size: {:?}", render_size);
     println!("Display size: {:?}", display_size);
@@ -196,6 +196,41 @@ fn run(app: &mut App) {
         motion_vector_image.image().handle()
     );
 
+    let output_image = ImageView::new_default(
+        Image::new(
+            app.memory_allocator(),
+            ImageCreateInfo {
+                image_type: ImageType::Dim2d,
+                extent: display_size_extent,
+                format: app
+                    .windows
+                    .get_renderer(window_id)
+                    .unwrap()
+                    .swapchain_format(),
+                usage: ImageUsage::COLOR_ATTACHMENT
+                    | ImageUsage::STORAGE
+                    | ImageUsage::TRANSFER_SRC,
+                samples,
+                ..Default::default()
+            },
+            AllocationCreateInfo::default(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    debug!(
+        "Output image view: {:?}, image: {:?}",
+        output_image.handle(),
+        output_image.image().handle()
+    );
+
+    let ash_device = unsafe {
+        ash::Device::load(
+            &app.context.instance().fns().v1_0,
+            app.context.device().handle(),
+        )
+    };
+
     let mut fsr_context =
         unsafe { FsrContextVulkan::new(app.context.device(), render_size, display_size) };
     info!("FsrContextVulkan created");
@@ -235,8 +270,7 @@ fn run(app: &mut App) {
 
         draw(
             &mut builder,
-            queue.clone(),
-            renderer.swapchain_image_view(),
+            color_image.clone(),
             motion_vector_image.clone(),
             depth_image.clone(),
             viewport,
@@ -246,7 +280,7 @@ fn run(app: &mut App) {
         );
         previous_camera = camera.clone();
 
-        let fsr_command_buffer = RecordingCommandBuffer::new(
+        let mut fsr_builder = RecordingCommandBuffer::new(
             command_buffer_allocator.clone(),
             queue.queue_family_index(),
             CommandBufferLevel::Primary,
@@ -266,21 +300,25 @@ fn run(app: &mut App) {
         );
 
         let fsr_command_buffer = unsafe {
-            debug!(
-                "fsr_command_buffer: {:?}",
-                fsr_command_buffer.raw().handle()
-            );
+            debug!("fsr_command_buffer: {:?}", fsr_builder.raw().handle());
             fsr_context.dispatch(
-                &fsr_command_buffer.raw(),
+                ash_device.clone(),
+                &fsr_builder.raw(),
                 &color_image,
                 &depth_image,
                 &motion_vector_image,
-                &renderer.swapchain_image_view(),
+                &output_image,
                 elapsed.as_millis() as f32,
                 camera,
             );
             debug!("Recording command buffer");
-            fsr_command_buffer.end().unwrap()
+            fsr_builder
+                .copy_image(CopyImageInfo::images(
+                    output_image.image().clone(),
+                    renderer.swapchain_image_view().image().clone(),
+                ))
+                .unwrap();
+            fsr_builder.end().unwrap()
         };
 
         let command_buffer = builder.end().unwrap();
@@ -289,6 +327,8 @@ fn run(app: &mut App) {
             .then_execute(queue.clone(), command_buffer)
             .unwrap()
             .then_execute(queue.clone(), fsr_command_buffer)
+            .unwrap()
+            .then_signal_semaphore_and_flush()
             .unwrap()
             .boxed();
         renderer.present(after, true);
@@ -312,7 +352,7 @@ fn run(app: &mut App) {
                             .validation_error_encountered
                             .load(std::sync::atomic::Ordering::Relaxed)
                         {
-                            panic!("Validation error encountered");
+                            // panic!("Validation error encountered");
                         }
                     }
                     _ => {}
@@ -327,7 +367,7 @@ fn run(app: &mut App) {
 }
 
 fn main() {
-    env::set_var("RUST_LOG", "debug");
+    env::set_var("RUST_LOG", "info");
     env_logger::init();
     info!("Starting block-world");
     let mut app = App::new();

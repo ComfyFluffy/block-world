@@ -8,7 +8,7 @@ use fsr_sys::{
     Resource, ENABLE_AUTO_EXPOSURE, ENABLE_DEBUG_CHECKING, MESSAGE_TYPE_ERROR,
     MESSAGE_TYPE_WARNING, OK, RESOURCE_STATE_COMPUTE_READ, RESOURCE_STATE_UNORDERED_ACCESS,
 };
-use log::{error, warn};
+use log::{debug, error, warn};
 use vulkano::{
     command_buffer::sys::RawRecordingCommandBuffer, device::Device, format::Format,
     image::view::ImageView, Handle, VulkanObject,
@@ -135,6 +135,7 @@ impl FsrContextVulkan {
 
     pub unsafe fn dispatch(
         &mut self,
+        device: ash::Device,
         command_buffer: &RawRecordingCommandBuffer,
         color: &ImageView,
         depth: &ImageView,
@@ -156,9 +157,57 @@ impl FsrContextVulkan {
             [self.display_size[0], self.display_size[1], 1]
         );
 
+        let command_buffer = command_buffer.handle();
+        let memory_barrier_color = ash::vk::ImageMemoryBarrier2 {
+            dst_stage_mask: ash::vk::PipelineStageFlags2::COMPUTE_SHADER,
+            new_layout: ash::vk::ImageLayout::READ_ONLY_OPTIMAL,
+            image: color.image().handle(),
+            subresource_range: ash::vk::ImageSubresourceRange {
+                aspect_mask: ash::vk::ImageAspectFlags::COLOR,
+                level_count: 1,
+                layer_count: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let memory_barrier_depth = ash::vk::ImageMemoryBarrier2 {
+            dst_stage_mask: ash::vk::PipelineStageFlags2::COMPUTE_SHADER,
+            new_layout: ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image: depth.image().handle(),
+            subresource_range: ash::vk::ImageSubresourceRange {
+                aspect_mask: ash::vk::ImageAspectFlags::DEPTH,
+                level_count: 1,
+                layer_count: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut memory_barrier_motion_vector = memory_barrier_color.clone();
+        memory_barrier_motion_vector.image = motion_vector.image().handle();
+        let memory_barrier_output = ash::vk::ImageMemoryBarrier2 {
+            new_layout: ash::vk::ImageLayout::GENERAL,
+            image: output.image().handle(),
+            subresource_range: ash::vk::ImageSubresourceRange {
+                aspect_mask: ash::vk::ImageAspectFlags::COLOR,
+                level_count: 1,
+                layer_count: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let dependency_info = ash::vk::DependencyInfo::builder()
+            .image_memory_barriers(&[
+                memory_barrier_color,
+                memory_barrier_depth,
+                memory_barrier_motion_vector,
+                memory_barrier_output,
+            ])
+            .build();
+        device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
+
         let input_extent = color.image().extent();
         let dispatch_description = DispatchDescription {
-            commandList: vk::getCommandList(command_buffer.handle().as_raw()),
+            commandList: vk::getCommandList(command_buffer.as_raw()),
             color: self.get_texture_resource(color, widecstr!("FSR2_InputColor")),
             depth: self.get_texture_resource(depth, widecstr!("FSR2_InputDepth")),
             motionVectors: self
@@ -195,8 +244,28 @@ impl FsrContextVulkan {
             cameraFovAngleVertical: Rad::from(camera.fovy).0,
             ..Default::default()
         };
+        debug!("Dispatching FSR context");
         let err = contextDispatch(self.context.as_mut(), &dispatch_description);
         assert_eq!(err, OK, "Failed to dispatch FSR context");
+
+        // Set the image layouts to GENERAL
+        let mut memory_barrier_color = memory_barrier_color.clone();
+        memory_barrier_color.new_layout = ash::vk::ImageLayout::GENERAL;
+        let mut memory_barrier_depth = memory_barrier_depth.clone();
+        memory_barrier_depth.new_layout = ash::vk::ImageLayout::GENERAL;
+        let mut memory_barrier_motion_vector = memory_barrier_motion_vector.clone();
+        memory_barrier_motion_vector.new_layout = ash::vk::ImageLayout::GENERAL;
+        let mut memory_barrier_output = memory_barrier_output.clone();
+        memory_barrier_output.new_layout = ash::vk::ImageLayout::GENERAL;
+        let dependency_info = ash::vk::DependencyInfo::builder()
+            .image_memory_barriers(&[
+                memory_barrier_color,
+                memory_barrier_depth,
+                memory_barrier_motion_vector,
+                memory_barrier_output,
+            ])
+            .build();
+        device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
     }
 
     pub unsafe fn step_jitter(&mut self) -> Matrix4<f32> {

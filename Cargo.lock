@@ -303,6 +303,7 @@ dependencies = [
 name = "block-world"
 version = "0.1.0"
 dependencies = [
+ "ash",
  "bincode",
  "cgmath",
  "env_logger",

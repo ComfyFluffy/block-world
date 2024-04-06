@@ -4,12 +4,7 @@ pub mod render_faces;
 use std::sync::Arc;
 
 use vulkano::{
-    command_buffer::{
-        allocator::StandardCommandBufferAllocator, CommandBuffer, CommandBufferBeginInfo,
-        CommandBufferLevel, CommandBufferUsage, RecordingCommandBuffer, RenderingAttachmentInfo,
-        RenderingInfo,
-    },
-    device::Queue,
+    command_buffer::{RecordingCommandBuffer, RenderingAttachmentInfo, RenderingInfo},
     format::ClearValue,
     image::view::ImageView,
     pipeline::graphics::viewport::Viewport,
@@ -18,7 +13,6 @@ use vulkano::{
 
 pub fn draw(
     mut builder: &mut RecordingCommandBuffer,
-    queue: Arc<Queue>,
     dst_image: Arc<ImageView>,
     motion_vector_image: Arc<ImageView>,
     depth_image: Arc<ImageView>,
@@ -31,7 +25,7 @@ pub fn draw(
                 Some(RenderingAttachmentInfo {
                     load_op: AttachmentLoadOp::Clear,
                     store_op: AttachmentStoreOp::Store,
-                    clear_value: Some([0.5, 0.0, 0.0, 1.0].into()),
+                    clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
                     // resolve_info: Some(RenderingAttachmentResolveInfo::image_view(dst_image)),
                     ..RenderingAttachmentInfo::image_view(dst_image)
                 }),

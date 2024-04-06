@@ -23,7 +23,7 @@ use vulkano::{
             multisample::MultisampleState,
             rasterization::{CullMode, RasterizationState},
             subpass::PipelineRenderingCreateInfo,
-            viewport::{Scissor, Viewport, ViewportState},
+            viewport::ViewportState,
             GraphicsPipelineCreateInfo,
         },
         layout::PipelineDescriptorSetLayoutCreateInfo,

@@ -45,9 +45,11 @@ impl App {
                 mesh_shader: true,
                 task_shader: true,
                 maintenance4: true,
-                fragment_stores_and_atomics: true,
                 shader_int16: true,
                 shader_float16: true,
+                synchronization2: true,
+                buffer_device_address: true,
+                buffer_device_address_capture_replay: true,
                 ..DeviceFeatures::empty()
             },
             instance_create_info: InstanceCreateInfo {
