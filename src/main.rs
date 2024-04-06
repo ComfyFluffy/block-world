@@ -1,4 +1,4 @@
-use std::{env, time::Instant};
+use std::{env, io::Write, time::Instant};
 
 use app::App;
 use fsr::FsrContextVulkan;
@@ -294,10 +294,11 @@ fn run(app: &mut App) {
         let elapsed = frame_time.elapsed();
         frame_time = Instant::now();
         print!(
-            "Frame time: {:?}, FPS: {}    \r",
+            "Frame time: {:.2?}, FPS: {:.2}\r",
             elapsed,
-            1.0 / elapsed.as_secs_f32()
+            1.0 / elapsed.as_secs_f32(),
         );
+        std::io::stdout().flush().unwrap();
 
         let fsr_command_buffer = unsafe {
             debug!("fsr_command_buffer: {:?}", fsr_builder.raw().handle());
