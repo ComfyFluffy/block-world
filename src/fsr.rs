@@ -159,7 +159,6 @@ impl FsrContextVulkan {
 
         let command_buffer = command_buffer.handle();
         let memory_barrier_color = ash::vk::ImageMemoryBarrier2 {
-            dst_stage_mask: ash::vk::PipelineStageFlags2::COMPUTE_SHADER,
             new_layout: ash::vk::ImageLayout::READ_ONLY_OPTIMAL,
             image: color.image().handle(),
             subresource_range: ash::vk::ImageSubresourceRange {
@@ -171,7 +170,6 @@ impl FsrContextVulkan {
             ..Default::default()
         };
         let memory_barrier_depth = ash::vk::ImageMemoryBarrier2 {
-            dst_stage_mask: ash::vk::PipelineStageFlags2::COMPUTE_SHADER,
             new_layout: ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             image: depth.image().handle(),
             subresource_range: ash::vk::ImageSubresourceRange {
@@ -195,13 +193,14 @@ impl FsrContextVulkan {
             },
             ..Default::default()
         };
+        let image_memory_barriers = [
+            memory_barrier_color,
+            memory_barrier_depth,
+            memory_barrier_motion_vector,
+            memory_barrier_output,
+        ];
         let dependency_info = ash::vk::DependencyInfo::builder()
-            .image_memory_barriers(&[
-                memory_barrier_color,
-                memory_barrier_depth,
-                memory_barrier_motion_vector,
-                memory_barrier_output,
-            ])
+            .image_memory_barriers(&image_memory_barriers)
             .build();
         device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
 
@@ -257,13 +256,14 @@ impl FsrContextVulkan {
         memory_barrier_motion_vector.new_layout = ash::vk::ImageLayout::GENERAL;
         let mut memory_barrier_output = memory_barrier_output.clone();
         memory_barrier_output.new_layout = ash::vk::ImageLayout::GENERAL;
+        let image_memory_barriers = [
+            memory_barrier_color,
+            memory_barrier_depth,
+            memory_barrier_motion_vector,
+            memory_barrier_output,
+        ];
         let dependency_info = ash::vk::DependencyInfo::builder()
-            .image_memory_barriers(&[
-                memory_barrier_color,
-                memory_barrier_depth,
-                memory_barrier_motion_vector,
-                memory_barrier_output,
-            ])
+            .image_memory_barriers(&image_memory_barriers)
             .build();
         device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
     }
