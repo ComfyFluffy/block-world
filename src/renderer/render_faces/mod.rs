@@ -160,6 +160,7 @@ pub struct Camera {
     pub near: f32,
     pub far: f32,
     pub fovy: Deg<f32>,
+    pub jitter: cgmath::Vector2<f32>,
 }
 
 fn upload_png(
@@ -424,7 +425,7 @@ impl RenderFacesPipeline {
                 mesh::PushConstants {
                     current_view_proj: (camera.proj * camera.view).into(),
                     previous_view_proj: (previous_camera.proj * previous_camera.view).into(),
-                    camera_pos: camera.position.into(),
+                    jitter: camera.jitter.into(),
                 },
             )
             .unwrap();

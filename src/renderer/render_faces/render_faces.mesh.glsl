@@ -27,7 +27,7 @@ layout(std430, set = 1, binding = 0) buffer VoxelBuffer { Voxel voxels[]; };
 layout(push_constant) uniform PushConstants {
   mat4 current_view_proj;
   mat4 previous_view_proj;
-  vec3 camera_pos;
+  vec2 jitter;
 }
 pc;
 
@@ -123,6 +123,9 @@ void main() {
 
   SetMeshOutputsEXT(faceCount * 4, faceCount * 2);
 
+  mat4 jitterTransform = mat4(1.0);
+  jitterTransform[3] = vec4(pc.jitter, 0.0, 1.0);
+
   for (int i = 0; i < faceCount; ++i) {
     gl_PrimitiveTriangleIndicesEXT[i * 2] = cube_indices[0] + i * 4;
     gl_PrimitiveTriangleIndicesEXT[i * 2 + 1] = cube_indices[1] + i * 4;
@@ -130,7 +133,8 @@ void main() {
     for (int j = 0; j < 4; ++j) {
       vec4 vertex = vec4(faces[i].vertices[j] + task.block_translation, 1.0);
       vec4 currentPosition = pc.current_view_proj * vertex;
-      gl_MeshVerticesEXT[i * 4 + j].gl_Position = currentPosition;
+      gl_MeshVerticesEXT[i * 4 + j].gl_Position =
+          jitterTransform * currentPosition;
       v_out[i * 4 + j].current_position = currentPosition;
       v_out[i * 4 + j].previous_position = pc.previous_view_proj * vertex;
       v_out[i * 4 + j].normal = faces[i].normal;

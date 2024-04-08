@@ -1,6 +1,7 @@
 use std::{env, io::Write, time::Instant};
 
 use app::App;
+use cgmath::Vector2;
 use fsr::FsrContextVulkan;
 use log::{debug, info};
 use renderer::{
@@ -83,7 +84,7 @@ fn run(app: &mut App) {
     // );
 
     let render_start = Instant::now();
-    let camera_fn = || {
+    let camera_fn = |jitter: Vector2<f32>| {
         let elapsed = render_start.elapsed().as_secs_f32();
         let position = cgmath::Point3::new(
             (elapsed * 0.5).sin() * 3.0,
@@ -101,10 +102,11 @@ fn run(app: &mut App) {
                 cgmath::Point3::new(0.0, 0.0, 0.0),
                 cgmath::Vector3::unit_y(),
             ),
-            proj: cgmath::perspective(fovy, 1280.0 / 720.0, near, far),
+            proj: cgmath::perspective(fovy, 1680.0 / 960.0, near, far),
             near,
             far,
             fovy,
+            jitter,
         }
     };
 
@@ -236,15 +238,14 @@ fn run(app: &mut App) {
     info!("FsrContextVulkan created");
 
     let command_buffer_allocator = app.command_buffer_allocator.clone();
-    let mut previous_camera = camera_fn();
+    let mut previous_camera = camera_fn([0.0, 0.0].into());
     let mut frame_time = Instant::now();
     let mut redraw = |renderer: &mut VulkanoWindowRenderer| {
         let before = renderer.acquire(None, |_| {}).unwrap();
 
-        let jitter_matrix = unsafe { fsr_context.step_jitter() };
+        let jitter = unsafe { fsr_context.step_jitter() };
 
-        let mut camera = camera_fn();
-        camera.proj = jitter_matrix * camera.proj;
+        let camera = camera_fn(jitter);
 
         let viewport = Viewport {
             extent: [render_size[0] as f32, render_size[1] as f32],
@@ -294,7 +295,7 @@ fn run(app: &mut App) {
         let elapsed = frame_time.elapsed();
         frame_time = Instant::now();
         print!(
-            "Frame time: {:.2?}, FPS: {:.2}\r",
+            "Frame time: {:.2?}, FPS: {:.2}       \r",
             elapsed,
             1.0 / elapsed.as_secs_f32(),
         );

@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, mem};
 
-use cgmath::{Matrix4, Rad};
+use cgmath::{Rad, Vector2};
 use fsr_sys::{
     contextCreate, contextDestroy, contextDispatch, getJitterOffset, getJitterPhaseCount,
     vk::{self, getDevice, getTextureResource},
@@ -268,7 +268,7 @@ impl FsrContextVulkan {
         device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
     }
 
-    pub unsafe fn step_jitter(&mut self) -> Matrix4<f32> {
+    pub unsafe fn step_jitter(&mut self) -> Vector2<f32> {
         let mut jitter_x = 0.0;
         let mut jitter_y = 0.0;
         getJitterOffset(
@@ -277,11 +277,12 @@ impl FsrContextVulkan {
             self.frame_index,
             self.jitter_phase_count,
         );
+        self.jitter_offset = [jitter_x, jitter_y];
         self.frame_index = (self.frame_index + 1) % self.jitter_phase_count;
 
         let jitter_x = 2.0 * jitter_x / self.render_size[0] as f32;
         let jitter_y = -2.0 * jitter_y / self.render_size[1] as f32;
-        Matrix4::from_translation(cgmath::Vector3::new(jitter_x, jitter_y, 0.0))
+        [jitter_x, jitter_y].into()
     }
 }
 
