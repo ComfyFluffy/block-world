@@ -202,9 +202,8 @@ impl FsrContextVulkan {
             memory_barrier_motion_vector,
             memory_barrier_output,
         ];
-        let dependency_info = ash::vk::DependencyInfo::builder()
-            .image_memory_barriers(&image_memory_barriers)
-            .build();
+        let dependency_info =
+            ash::vk::DependencyInfo::default().image_memory_barriers(&image_memory_barriers);
         device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
 
         let input_extent = color.image().extent();
@@ -273,9 +272,8 @@ impl FsrContextVulkan {
             memory_barrier_motion_vector,
             memory_barrier_output,
         ];
-        let dependency_info = ash::vk::DependencyInfo::builder()
-            .image_memory_barriers(&image_memory_barriers)
-            .build();
+        let dependency_info =
+            ash::vk::DependencyInfo::default().image_memory_barriers(&image_memory_barriers);
         device.cmd_pipeline_barrier2(command_buffer, &dependency_info);
     }
 
