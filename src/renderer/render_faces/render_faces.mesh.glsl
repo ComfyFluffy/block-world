@@ -4,7 +4,7 @@
 //////////////////////////////////////////////////
 // MESH CONFIG
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 6, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 4 * 6, max_primitives = 2 * 6) out;
 
 //////////////////////////////////////////////////
@@ -89,28 +89,23 @@ struct Face {
 };
 
 // Function to generate all faces of a voxel
-uint generateVoxelFaces(Voxel voxel, out Face faces[6]) {
-  uint faceCount = 0;
-
-  for (int i = 0; i < 6; ++i) {
-    // Skip faces that are connected to other voxels and are culled
-    if ((task.connected_bits & (1 << i)) != 0 && voxel.faces[i].cullface) {
-      continue;
-    }
-    for (int j = 0; j < 4; ++j) {
-      faces[faceCount].vertices[j] =
-          voxel.from + cube_vertices[i][j] * (voxel.to - voxel.from);
-    }
-    faces[faceCount].normal = cube_normals[i];
-    // TODO: calculate tex_coords
-    faces[faceCount].tex_coords[0] = vec2(0.0, 0.0);
-    faces[faceCount].tex_coords[1] = vec2(1.0, 0.0);
-    faces[faceCount].tex_coords[2] = vec2(1.0, 1.0);
-    faces[faceCount].tex_coords[3] = vec2(0.0, 1.0);
-
-    faceCount++;
+bool generateVoxelFace(Voxel voxel, uint direction, out Face face) {
+  // Skip faces that are connected to other voxels and are culled
+  if ((task.connected_bits & (1 << direction)) != 0 &&
+      voxel.faces[direction].cullface) {
+    return false;
   }
-  return faceCount;
+  for (int i = 0; i < 4; ++i) {
+    face.vertices[i] =
+        voxel.from + cube_vertices[direction][i] * (voxel.to - voxel.from);
+  }
+  face.normal = cube_normals[direction];
+  face.tex_coords[0] = vec2(0.0, 0.0);
+  face.tex_coords[1] = vec2(1.0, 0.0);
+  face.tex_coords[2] = vec2(1.0, 1.0);
+  face.tex_coords[3] = vec2(0.0, 1.0);
+
+  return true;
 }
 
 void main() {
@@ -118,28 +113,29 @@ void main() {
 
   Voxel voxel = voxels[voxel_index];
 
-  Face faces[6];
-  uint faceCount = generateVoxelFaces(voxel, faces);
+  uint direction = gl_LocalInvocationID.x;
+  Face face;
+  if (!generateVoxelFace(voxel, direction, face)) {
+    return;
+  }
 
-  SetMeshOutputsEXT(faceCount * 4, faceCount * 2);
+  SetMeshOutputsEXT(4 * 6, 2 * 6);
 
   mat4 jitterTransform = mat4(1.0);
   jitterTransform[3] = vec4(pc.jitter, 0.0, 1.0);
 
-  for (int i = 0; i < faceCount; ++i) {
-    gl_PrimitiveTriangleIndicesEXT[i * 2] = cube_indices[0] + i * 4;
-    gl_PrimitiveTriangleIndicesEXT[i * 2 + 1] = cube_indices[1] + i * 4;
+  gl_PrimitiveTriangleIndicesEXT[direction * 2] = cube_indices[0];
+  gl_PrimitiveTriangleIndicesEXT[direction * 2 + 1] = cube_indices[1];
 
-    for (int j = 0; j < 4; ++j) {
-      vec4 vertex = vec4(faces[i].vertices[j] + task.block_translation, 1.0);
-      vec4 currentPosition = pc.current_view_proj * vertex;
-      gl_MeshVerticesEXT[i * 4 + j].gl_Position =
-          jitterTransform * currentPosition;
-      v_out[i * 4 + j].current_position = currentPosition;
-      v_out[i * 4 + j].previous_position = pc.previous_view_proj * vertex;
-      v_out[i * 4 + j].normal = faces[i].normal;
-      v_out[i * 4 + j].tex_coords = faces[i].tex_coords[j];
-      v_out[i * 4 + j].texture_index = voxel.faces[i].texture_index;
-    }
+  for (uint i = 0; i < 4; ++i) {
+    uint j = i + 4 * direction;
+    vec4 vertex = vec4(face.vertices[j] + task.block_translation, 1.0);
+    vec4 currentPosition = pc.current_view_proj * vertex;
+    gl_MeshVerticesEXT[j].gl_Position = jitterTransform * currentPosition;
+    v_out[j].current_position = currentPosition;
+    v_out[j].previous_position = pc.previous_view_proj * vertex;
+    v_out[j].normal = face.normal;
+    v_out[j].tex_coords = face.tex_coords[j];
+    v_out[j].texture_index = voxel.faces[direction].texture_index;
   }
 }
