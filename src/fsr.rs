@@ -1,5 +1,6 @@
 use std::{marker::PhantomData, mem};
 
+use ash::vk::ImageMemoryBarrier2;
 use cgmath::{Rad, Vector2};
 use fsr_sys::{
     contextCreate, contextDestroy, contextDispatch, getJitterOffset, getJitterPhaseCount,
@@ -158,7 +159,7 @@ impl FsrContextVulkan {
         );
 
         let command_buffer = command_buffer.handle();
-        let memory_barrier_color = ash::vk::ImageMemoryBarrier2 {
+        let memory_barrier_color = ImageMemoryBarrier2 {
             new_layout: ash::vk::ImageLayout::READ_ONLY_OPTIMAL,
             image: color.image().handle(),
             subresource_range: ash::vk::ImageSubresourceRange {
@@ -169,7 +170,7 @@ impl FsrContextVulkan {
             },
             ..Default::default()
         };
-        let memory_barrier_depth = ash::vk::ImageMemoryBarrier2 {
+        let memory_barrier_depth = ImageMemoryBarrier2 {
             new_layout: ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             image: depth.image().handle(),
             subresource_range: ash::vk::ImageSubresourceRange {
@@ -180,9 +181,11 @@ impl FsrContextVulkan {
             },
             ..Default::default()
         };
-        let mut memory_barrier_motion_vector = memory_barrier_color.clone();
-        memory_barrier_motion_vector.image = motion_vector.image().handle();
-        let memory_barrier_output = ash::vk::ImageMemoryBarrier2 {
+        let memory_barrier_motion_vector = ImageMemoryBarrier2 {
+            image: motion_vector.image().handle(),
+            ..memory_barrier_color
+        };
+        let memory_barrier_output = ImageMemoryBarrier2 {
             new_layout: ash::vk::ImageLayout::GENERAL,
             image: output.image().handle(),
             subresource_range: ash::vk::ImageSubresourceRange {
@@ -248,14 +251,22 @@ impl FsrContextVulkan {
         assert_eq!(err, OK, "Failed to dispatch FSR context");
 
         // Set the image layouts to GENERAL
-        let mut memory_barrier_color = memory_barrier_color.clone();
-        memory_barrier_color.new_layout = ash::vk::ImageLayout::GENERAL;
-        let mut memory_barrier_depth = memory_barrier_depth.clone();
-        memory_barrier_depth.new_layout = ash::vk::ImageLayout::GENERAL;
-        let mut memory_barrier_motion_vector = memory_barrier_motion_vector.clone();
-        memory_barrier_motion_vector.new_layout = ash::vk::ImageLayout::GENERAL;
-        let mut memory_barrier_output = memory_barrier_output.clone();
-        memory_barrier_output.new_layout = ash::vk::ImageLayout::GENERAL;
+        let memory_barrier_color = ImageMemoryBarrier2 {
+            new_layout: ash::vk::ImageLayout::GENERAL,
+            ..memory_barrier_color
+        };
+        let memory_barrier_depth = ImageMemoryBarrier2 {
+            new_layout: ash::vk::ImageLayout::GENERAL,
+            ..memory_barrier_depth
+        };
+        let memory_barrier_motion_vector = ImageMemoryBarrier2 {
+            new_layout: ash::vk::ImageLayout::GENERAL,
+            ..memory_barrier_motion_vector
+        };
+        let memory_barrier_output = ImageMemoryBarrier2 {
+            new_layout: ash::vk::ImageLayout::GENERAL,
+            ..memory_barrier_output
+        };
         let image_memory_barriers = [
             memory_barrier_color,
             memory_barrier_depth,
